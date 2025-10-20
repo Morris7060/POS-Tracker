@@ -13,18 +13,42 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="main.js" type="module"></script>
+  <link rel="stylesheet" href="./dist/output.css" />
+  
 
 
-  <style>[x-cloak]{display:none!important} .cursor-sort{cursor:pointer}</style>
+  <style>
+    [x-cloak]{display:none!important} 
+    .cursor-sort{cursor:pointer}
+    /* Modal slide-in animation */
+    .slide-in {
+      transform: translateX(100%);
+      transition: transform 0.3s ease-in-out;
+    }
+    .slide-in.show {
+      transform: translateX(0);
+    }
+    /* Modal fade-scale animation */
+    .fade-scale {
+      transform: scale(0.95);
+      opacity: 0;
+      transition: all 0.2s ease-in-out;
+    }
+    .fade-scale.show {
+      transform: scale(1);
+      opacity: 1;
+    }
+    /* Tailwind base styles (NOTE: Remove these from the <style> block and use a build process for production) */
+    @tailwind base;
+    @tailwind components;
+    @tailwind utilities;
+  </style>
 </head>
 <body class="bg-white text-slate-900">
 
 <script>
 /* -----------------------
-  CONFIG: your Supabase
-  Keep the URL, replace the KEY locally with your real anon key.
+  CONFIG: your Supabase (Must be defined before main.js runs)
 ----------------------- */
 const SUPABASE_URL = 'https://drvkqsjlartfeatujwzu.supabase.co';
 // Replace 'YOUR_SUPABASE_ANON_KEY' with your real key locally
@@ -96,11 +120,8 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         <button @click="refreshAll()" class="bg-white px-3 py-2 rounded border">🔄 Refresh</button>
       </div>
     </header>
-      <!-- REPORT Section -->
-  <section x-show="view==='report'" x-cloak x-data="agentsReport()">
-  <h2 class="text-2xl font-bold mb-4">Agents per Supervisor</h2>
+      <section x-show="view==='report'" x-cloak> <h2 class="text-2xl font-bold mb-4">Agents per Supervisor</h2>
 
-  <!-- Supervisor Dropdown -->
   <div class="mb-4">
     <label for="supervisorSelect" class="font-semibold block mb-1">Select Supervisor:</label>
     <select id="supervisorSelect" x-model="selectedSupervisorId"
@@ -112,7 +133,6 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </select>
   </div>
 
-  <!-- Agents Table -->
   <div class="bg-white rounded shadow p-4 overflow-auto max-h-[60vh]">
     <template x-if="selectedSupervisorAgents.length > 0">
       <table class="table-auto w-full border-collapse">
@@ -130,7 +150,7 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
               <td class="border px-4 py-2" x-text="agent.contact || 'No contact'"></td>
               <td class="border px-4 py-2 space-x-2">
                 <button class="bg-blue-500 text-white px-2 py-1 rounded"
-                        @click="editAgent(agent)">Edit</button>
+                        @click="openModal('editAgent', agent)">Edit</button>
                 <button class="bg-red-500 text-white px-2 py-1 rounded"
                         @click="deleteAgent(agent)">Delete</button>
               </td>
@@ -144,65 +164,76 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </template>
   </div>
 
-  <!-- Export Buttons -->
-  <div class="mt-4 flex gap-2">
-    <button class="bg-white text-sky-700 px-3 py-2 rounded border"
-            @click="exportAgentsPerSupervisorPDF()">Export PDF</button>
-    <button class="bg-white text-sky-700 px-3 py-2 rounded border"
-            @click="exportAgentsPerSupervisorCSV()">Export CSV</button>
-  </div>
+<div class="flex space-x-4">
+    <button 
+        class="bg-white text-sky-700 px-3 py-2 rounded border flex items-center space-x-2" 
+        @click="exportAgentsPerSupervisorPDF()"
+    >
+        <i data-lucide="file-text" class="w-4 h-4"></i>
+        <span>Export PDF Report</span>
+    </button>
+    
+    <button 
+        class="bg-white text-sky-700 px-3 py-2 rounded border flex items-center space-x-2" 
+        @click="exportAgentsPerSupervisorCSV()"
+    >
+        <i data-lucide="download" class="w-4 h-4"></i>
+        <span>Export CSV Report</span>
+    </button>
+</div>
+</section>
 </section>
 
-
-
-
-<!-- Greeting & Time Section -->
 <div class="p-4 bg-white rounded-2xl shadow-md mb-6 flex flex-col items-start">
   <h2 id="greeting" class="text-2xl font-bold text-gray-800"></h2>
   <p id="time" class="text-lg text-gray-500"></p>
 </div>
 
-<!-- Dashboard Section -->
-<section x-show="view==='dashboard'" x-cloak>
-  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <!-- Summary Cards -->
-    <div class="bg-white p-4 rounded shadow">
-      <h3 class="text-lg font-semibold">Supervisors</h3>
-      <p class="text-2xl font-bold text-slate-700" x-text="counts.supervisors"></p>
-    </div>
-
-    <div class="bg-white p-4 rounded shadow">
-      <h3 class="text-lg font-semibold">Agents</h3>
-      <p class="text-2xl font-bold text-slate-700" x-text="counts.agents"></p>
-    </div>
-
-    <div class="bg-white p-4 rounded shadow">
-      <h3 class="text-lg font-semibold">POS Devices</h3>
-      <p class="text-2xl font-bold text-slate-700" x-text="counts.pos"></p>
-    </div>
-  </div>
-<div class="bg-white p-4 rounded shadow h-[400px] overflow-hidden">
-  <canvas id="desktopChart"></canvas>
-</div>
-
-  <!-- Chart Card -->
-  <div class="bg-white p-4 rounded shadow mt-6 max-w-5xl mx-auto">
-    <div class="flex items-center justify-between mb-2">
-      <h3 class="text-lg font-semibold">Agents per Supervisor</h3>
-      <button
-        class="bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded text-sm flex items-center gap-1"
-        @click="toggleChartType()"
-        aria-pressed="false"
-      >
-        <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-        <span x-text="chartType === 'bar' ? 'Switch to Pie' : 'Switch to Bar'"></span>
-      </button>
-    </div>
-    <div class="h-72 relative">
-      <canvas id="agentsChart" aria-label="Agents per supervisor chart"></canvas>
-    </div>
-  </div>
 </section>
+
+<div class="p-4 sm:p-6 lg:p-8">
+
+    <div class="p-4 bg-white rounded-2xl shadow-md mb-6 flex flex-col items-start">
+        <h2 id="greeting" class="text-xl sm:text-2xl font-bold text-gray-800"></h2>
+        <p id="time" class="text-sm sm:text-lg text-gray-500"></p>
+    </div>
+
+    <section x-show="view==='dashboard'" x-cloak>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold">Supervisors</h3>
+                <p class="text-2xl font-bold text-slate-700" x-text="counts.supervisors"></p>
+            </div>
+
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold">Agents</h3>
+                <p class="text-2xl font-bold text-slate-700" x-text="counts.agents"></p>
+            </div>
+
+            <div class="bg-white p-4 rounded shadow">
+                <h3 class="text-lg font-semibold">POS Devices</h3>
+                <p class="text-2xl font-bold text-slate-700" x-text="counts.pos"></p>
+            </div>
+        </div>
+
+        <div class="bg-white p-4 rounded shadow mt-6 mx-auto w-full lg:max-w-5xl">
+            <div class="flex items-center justify-between mb-2">
+                <h3 class="text-lg font-semibold">Agents per Supervisor</h3>
+                <button
+                    class="bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded text-sm flex items-center gap-1"
+                    @click="toggleChartType()"
+                    aria-pressed="false"
+                >
+                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+                    <span x-text="chartType === 'bar' ? 'Switch to Pie' : 'Switch to Bar'"></span>
+                </button>
+            </div>
+            
+            <div class="h-96 relative">
+                <canvas id="agentsChart" aria-label="Agents per supervisor chart"></canvas>
+            </div>
+        </div>
+    </section>
 
     <section x-show="view==='agents'" x-cloak>
       <div class="flex justify-between items-center mb-4">
@@ -381,7 +412,6 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   </main>
 </div>
 
-<!-- Modal drawer -->
 <div x-show="modalOpen" x-cloak class="fixed inset-0 z-50 flex">
   <div @click="closeModal()" class="absolute inset-0 bg-black/40"></div>
   <div class="ml-auto w-full max-w-xl bg-white h-full shadow-lg p-6 overflow-auto slide-in" :class="modalOpen? 'show':''" role="dialog" aria-modal="true">
@@ -397,7 +427,6 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </div>
 
     <div class="mt-4">
-      <!-- Supervisor modal -->
       <div x-show="modalType==='addSupervisor' || modalType==='editSupervisor'">
         <div x-show="modalStep===1" class="fade-scale" :class="modalStep===1? 'show':''">
           <label class="block mb-2" for="supName">Name
@@ -421,7 +450,6 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         </div>
       </div>
 
-      <!-- Agent modal -->
       <div x-show="modalType==='addAgent' || modalType==='editAgent'">
         <div x-show="modalStep===1" class="fade-scale" :class="modalStep===1? 'show':''">
           <label class="block mb-2" for="agtName">Name
@@ -454,7 +482,6 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
         </div>
       </div>
 
-      <!-- POS modal -->
       <div x-show="modalType==='addPOS' || modalType==='editPOS'">
         <div x-show="modalStep===1" class="fade-scale" :class="modalStep===1? 'show':''">
           <label class="block mb-2" for="posSerial">Serial Number
@@ -491,7 +518,6 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
   </div>
 </div>
 
-<!-- Toast area (local, compatible with Alpine.store) -->
 <div x-data="{ toasts: [] }" x-init="$watch('toasts', () => { toasts.forEach(t => setTimeout(()=> toasts.splice(toasts.indexOf(t),1), 4200)) })" class="fixed top-4 right-4 z-50 pointer-events-none">
   <template x-for="(t,i) in toasts" :key="i">
     <div class="bg-white border rounded shadow px-4 py-2 mb-2 pointer-events-auto flex items-center gap-3">
@@ -503,710 +529,30 @@ window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     </div>
   </template>
 </div>
-<div x-data="app()" x-init="fetchAgents()">
-
-  <!-- Loop through supervisors and their agents -->
-  <template x-for="group in agentsPerSupervisor" :key="group.supervisor">
-    <div class="mb-4 border p-3 rounded">
-      <h3 class="font-bold" x-text="group.supervisor"></h3>
-      <ul>
-        <template x-for="agent in group.agents" :key="agent.id">
-          <li x-text="agent.name"></li>
-        </template>
-      </ul>
-    </div>
-  </template>
-
-  
 
 
-</div>
-<!-- BEGIN: Blue Star Assistant (place before </body>) -->
-<!-- Assistant panel -->
-<div id="chatPanel" class="bst-chat-panel hidden" aria-hidden="true">
-  <div class="chat-header">
-    <button id="closeBtnAssistant" class="close-btn">✖</button>
-    <h3>Assistant</h3>
+<button id="openAIButton" class="fixed bottom-4 right-4 z-40 bg-sky-600 hover:bg-sky-700 text-white p-3 rounded-full shadow-lg" title="Open AI Assistant">
+  <i data-lucide="bot" class="w-6 h-6"></i>
+</button>
+
+<div id="aiChatWindow" class="fixed bottom-16 right-4 z-40 w-80 h-96 bg-white rounded-lg shadow-2xl flex flex-col hidden overflow-hidden" style="display:none;">
+  <div class="bg-sky-700 text-white p-3 flex justify-between items-center">
+    <h4 class="font-semibold">AI Assistant</h4>
+    <button id="closeAIButton" class="p-1 rounded hover:bg-sky-600">
+      <i data-lucide="x" class="w-4 h-4"></i>
+    </button>
   </div>
-  <div class="chat-body">
-    <!-- Chat content here -->
+  <div id="chatOutput" class="flex-1 p-3 overflow-y-auto flex flex-col gap-2">
+    <div class="text-sm text-gray-500 text-center p-2 border-b"><br>I'm Still Under Development.</br></div>
+  </div>
+  <div class="p-3 border-t flex gap-2">
+    <input id="chatInput" type="text" placeholder="Ask a question..." class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-sky-500" />
+    <button id="sendBtn" class="bg-sky-700 text-white px-3 py-2 rounded hover:bg-sky-800">
+      <i data-lucide="send" class="w-4 h-4"></i>
+    </button>
   </div>
 </div>
-
-<script>
-  document.addEventListener('alpine:init', () => {
-    // Toast store
-    Alpine.store('toasts', {
-      items: [],
-      pushSimple(title, emoji = '🔔', message = '') {
-        this.items.push({ title, message, emoji, id: Date.now() });
-        // Auto-dismiss oldest after 3.5s
-        setTimeout(() => {
-          if (this.items.length) this.items.shift();
-        }, 3500); 
-      },
-      dismiss(id) {
-        this.items = this.items.filter(toast => toast.id !== id);
-      }
-    });
-  });
-
-/* -------------------------
-  Main Alpine app
-------------------------- */
-function app(){
-  return {
-    agentsPerSupervisor: [],
-    view: 'dashboard',
-    supabase: window.supabase,
-    /* counts */
-    counts: { supervisors:0, agents:0, pos:0, requests_pending:0 },
-    /* search & filters */
-    globalSearch: '', filterText: '', logsFilter: '',
-    /* pagination & sorting (supervisors) */
-    supPage: 1, supPageSize: 10, supSortColumn: 'name', supSortDir: 'asc', supervisorsTotal: 0,
-    /* pagination & sorting (agents) */
-    agtPage: 1, agtPageSize: 10, agtSortColumn: 'name', agtSortDir: 'asc', agentsTotal: 0,
-    /* data */
-    supervisors: [], agents: [], all_agents: [], pos_devices: [], pos_requests: [], activity_logs: [],
-    /* modal */
-    modalOpen: false, modalType: '', modalStep: 1, form: {}, modalTitle: '', modalSubtitle: '',
-    supSelect: [],
-    /* settings */
-    settings: { admin_name:'ICT Officer', email:'', theme:'light', notifications:true },
-    /* charts */
-    chartAgents: null,
-    chartType: localStorage.getItem('bst_chartType') || 'bar',
-    _isToggling: false,
-
-    /* init: run after Alpine loads */
-    async initApp() {
-      try {
-        // load settings first
-        await this.loadSettings();
-        await Promise.all([
-          this.fetchSupervisors(),
-          this.fetchAgents(),
-          this.fetchPOS(),
-          this.fetchActivityLogs()
-        ]);
-      } catch (e) {
-        console.warn('data load error', e);
-      }
-function renderIcons() {
-  lucide.createIcons();
-}
-
-// Call once after page load
-renderIcons();
-
-// Also call after data changes that render buttons/icons dynamically
-document.addEventListener('alpine:updated', () => {
-  renderIcons();
-});
-
-      this.updateCounts();
-      this.setupRealtime();
-
-      // protect against chart errors
-      try {
-        this.$nextTick(() => this.initChart());
-      } catch (err) {
-        console.warn('chart init skipped:', err);
-      }
-
-      // Wire Alpine.store to local toasts UI
-      this.syncToastStore();
-    },
-
-    /* keep a live mirror of Alpine.store('toasts') into local toasts array for UI */
-    syncToastStore() {
-      try {
-        const store = Alpine.store('toasts');
-        // reactive update - poll-based fallback
-        setInterval(() => {
-          if (JSON.stringify(this.toasts) !== JSON.stringify(store.items)) {
-            this.toasts = [...store.items];
-          }
-        }, 500);
-      } catch(e){}
-    },
-exportAgentsPerSupervisorPDF() {
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-
-    let y = 10;
-    this.agentsPerSupervisor.forEach(group => {
-        doc.setFontSize(14);
-        doc.text(group.supervisor, 10, y);
-        y += 6;
-        doc.setFontSize(12);
-        group.agents.forEach(a => {
-            doc.text(`- ${a.name} (${a.contact || 'No contact'})`, 14, y);
-            y += 6;
-            if (y > 280) { doc.addPage(); y = 10; }
-        });
-        y += 4;
-    });
-
-    doc.save('Agents_Per_Supervisor.pdf');
-},
-exportAgentsPerSupervisorCSV() {
-    let csv = 'Supervisor,Agent Name,Contact\n';
-    this.agentsPerSupervisor.forEach(group => {
-        group.agents.forEach(a => {
-            csv += `"${group.supervisor}","${a.name}","${a.contact || ''}"\n`;
-        });
-    });
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'Agents_Per_Supervisor.csv';
-    link.click();
-    URL.revokeObjectURL(url);
-},
-
-    /* navigation */
-    nav(viewName){
-      this.view = viewName;
-      // reset any modal state that could block clicks
-      this.modalOpen = false;
-      this.modalType = '';
-      this.modalStep = 1;
-      this.form = {};
-
-      const titleMap = {
-        dashboard:'Dashboard',
-        supervisors:'Supervisors',
-        agents:'Agents',
-        pos:'POS Devices',
-        logs:'Activity Logs',
-        settings:'Settings'
-      };
-      const subMap = {
-        dashboard:'Enterprise POS — Internal Use Only',
-        supervisors:'Manage and track field supervisors',
-        agents:'Manage field agents',
-        pos:'Track POS device inventory',
-        logs:'View system activity log',
-        settings:'Manage system settings and backups'
-      };
-      const t = titleMap[viewName] || 'Dashboard';
-      const s = subMap[viewName] || '';
-      const elTitle = document.getElementById('pageTitle');
-      const elSub = document.getElementById('pageSub');
-      if (elTitle) elTitle.innerText = t;
-      if (elSub) elSub.innerText = s;
-    },
-
-    /* ---------- SERVER-SIDE: Supervisors (paging + sorting) ---------- */
-    async fetchSupervisors(){
-      try {
-        const start = (this.supPage - 1) * this.supPageSize;
-        const end = start + this.supPageSize - 1;
-        const { data, error } = await this.supabase.from('supervisors')
-          .select('*', { count: 'exact' })
-          .ilike('name', `%${this.filterText || ''}%`)
-          .order(this.supSortColumn, { ascending: this.supSortDir === 'asc' })
-          .range(start, end);
-        if(error) throw error;
-        this.supervisors = data || [];
-        // fetch total count separately (Supabase sometimes needs head:true)
-        const cnt = await this.supabase.from('supervisors').select('supervisor_id',{ count: 'exact', head: true }).ilike('name', `%${this.filterText || ''}%`);
-        this.supervisorsTotal = cnt.count || (data||[]).length;
-        // derived fields
-        await this.attachSupervisorDerived();
-        // Update supervisor select for modals
-        this.supSelect = this.supervisors || [];
-        this.updateChart();
-      } catch(e){ console.error('fetchSupervisors', e); this.notifyError('Fetch supervisors failed', e); }
-    },
-
-    // derived fields for supervisors
-    async attachSupervisorDerived(){
-      try {
-        const { data: allAgents } = await this.supabase.from('agents').select('*');
-        const { data: allPos } = await this.supabase.from('pos_devices').select('*');
-        this.all_agents = allAgents || [];
-        this.pos_devices = (allPos || []).map(p => ({ ...p }));
-        for(const s of this.supervisors){
-          s.agent_count = (this.all_agents || []).filter(a => a.supervisor_id === s.supervisor_id).length;
-          s.pos_assigned = (this.pos_devices || []).filter(p => {
-            const ag = this.all_agents.find(x => x.agent_id === p.agent_id);
-            return ag && ag.supervisor_id === s.supervisor_id;
-          }).length;
-        }
-      } catch(e){ console.error('attachSupervisorDerived', e);}
-    },
-
-    changeSort(column, which){
-      if(which === 'supervisors'){
-        if(this.supSortColumn === column) this.supSortDir = this.supSortDir === 'asc' ? 'desc' : 'asc';
-        else { this.supSortColumn = column; this.supSortDir = 'asc'; }
-        this.fetchSupervisors();
-      } else {
-        if(this.agtSortColumn === column) this.agtSortDir = this.agtSortDir === 'asc' ? 'desc' : 'asc';
-        else { this.agtSortColumn = column; this.agtSortDir = 'asc'; }
-        this.fetchAgents();
-      }
-    },
-
-    changePage(direction, which){
-      if(which==='supervisors'){
-        if(direction==='next') this.supPage++; else if(direction==='prev' && this.supPage>1) this.supPage--;
-        this.fetchSupervisors();
-      } else {
-        if(direction==='next') this.agtPage++; else if(direction==='prev' && this.agtPage>1) this.agtPage--;
-        this.fetchAgents();
-      }
-    },
-
-    get supervisorsCountDisplay(){ return `${Math.min(this.supPage * this.supPageSize, this.supervisorsTotal || this.supervisors.length)} / ${this.supervisorsTotal || this.supervisors.length}`; },
-
-    /* ---------- SERVER-SIDE: Agents (paging + sorting) ---------- */
-    async fetchAgents(){
-      try {
-        const start = (this.agtPage - 1) * this.agtPageSize;
-        const end = start + this.agtPageSize - 1;
-        const { data, error } = await this.supabase.from('agents').select('*,supervisor:supervisor_id(name)').ilike('name', `%${this.filterText||''}%`).order(this.agtSortColumn, { ascending: this.agtSortDir==='asc' }).range(start, end);
-        if(error) throw error;
-        this.agents = (data || []).map(a => ({ ...a, supervisor_name: a.supervisor?.name || '' }));
-        const cnt = await this.supabase.from('agents').select('agent_id',{ count:'exact', head:true }).ilike('name', `%${this.filterText||''}%`);
-        this.agentsTotal = cnt.count || (data||[]).length;
-        // Also update all_agents for POS modal if needed
-        this.all_agents = (await this.supabase.from('agents').select('*')).data || [];
-      } catch(e){ console.error('fetchAgents', e); this.notifyError('Fetch agents failed', e); }
-    },
-
-    get agentsCountDisplay(){ return `${Math.min(this.agtPage * this.agtPageSize, this.agentsTotal || this.agents.length)} / ${this.agentsTotal || this.agents.length}`; },
-
-    /* ---------- POS & Logs ---------- */
-    async fetchPOS(){
-      try {
-        const { data, error } = await this.supabase.from('pos_devices').select('*,agent_id(name,agent_id)').order('serial_number');
-        if(error) throw error;
-        this.pos_devices = (data || []).map(p => ({ ...p, agent_name: p.agent_id ? p.agent_id.name : '' }));
-      } catch(e){ console.error('fetchPOS', e); this.notifyError('Fetch POS failed', e); }
-    },
-
-    async fetchActivityLogs(){
-      try {
-        const { data, error } = await this.supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(1000);
-        if(error) throw error;
-        this.activity_logs = data || [];
-      } catch(e){ console.error('fetchActivityLogs', e); this.notifyError('Fetch logs failed', e); }
-    },
-
-    applyLogsFilter(){
-      // client-side filtered via getter
-    },
-
-    get filteredActivityLogs(){
-      if(!this.logsFilter) return this.activity_logs;
-      const filter = this.logsFilter.toLowerCase();
-      return this.activity_logs.filter(l => 
-        (l.action||'').toLowerCase().includes(filter) || 
-        (l.details||'').toLowerCase().includes(filter) ||
-        (l.user_name||'').toLowerCase().includes(filter)
-      );
-    },
-
-    applySearch(){ this.supPage=1; this.agtPage=1; this.fetchSupervisors(); this.fetchAgents(); },
-
-    async refreshAll(){ await Promise.all([ this.fetchSupervisors(), this.fetchAgents(), this.fetchPOS(), this.fetchActivityLogs() ]); this.updateCounts(); this.updateChart(); },
-
-    updateCounts(){ this.counts.supervisors = this.supervisorsTotal || this.supervisors.length; this.counts.agents = this.agentsTotal || this.agents.length; this.counts.pos = this.pos_devices.length; },
-
-    /* ---------- MODALS ---------- */
-    openModal(type, payload=null){
-      this.modalType = type; this.modalStep = 1;
-      this.form = payload ? JSON.parse(JSON.stringify(payload)) : {};
-      this.modalTitle = ({ addSupervisor:'Add Supervisor', editSupervisor:'Edit Supervisor', addAgent:'Add Agent', editAgent:'Edit Agent', addPOS:'Add POS', editPOS:'Edit POS' })[type] || '';
-      this.modalSubtitle = 'Step 1 — Details';
-      this.modalOpen = true;
-      // Ensure supSelect is current when opening the Agent modal
-      if (type.includes('Agent')) {
-          this.supSelect = this.supervisors.length ? this.supervisors : [];
-      }
-    },
-
-    closeModal(){ this.modalOpen=false; this.modalType=''; this.modalStep=1; this.form={}; this.modalTitle=''; this.modalSubtitle=''; },
-
-    nextModalStep(){ if(this.modalStep<2){ this.modalStep++; this.modalSubtitle='Step 2 — Confirm'; } },
-    prevModalStep(){ if(this.modalStep>1){ this.modalStep--; this.modalSubtitle='Step 1 — Details'; } },
-
-    /* ---------- Supervisor CRUD ---------- */
-    async addSupervisorConfirm(){
-      if(!this.form.name) return alert('Name required');
-      try {
-        const { error } = await this.supabase.from('supervisors').insert([{ name: this.form.name, region: this.form.region }]);
-        if(error) throw error;
-        await this.logActivity('Added supervisor', `Name: ${this.form.name}`);
-        Alpine.store('toasts').pushSimple('Supervisor added','👥', this.form.name);
-        this.closeModal(); this.fetchSupervisors(); this.fetchAgents(); this.fetchPOS();
-      } catch(e){ alert(e.message || 'Failed to add supervisor'); console.error(e); }
-    },
-
-    async updateSupervisorConfirm(){
-      if(!this.form.name) return alert('Name required');
-      try {
-        const { error } = await this.supabase.from('supervisors').update({ name: this.form.name, region: this.form.region }).eq('supervisor_id', this.form.supervisor_id);
-        if(error) throw error;
-        await this.logActivity('Edited supervisor', `ID: ${this.form.supervisor_id}`);
-        Alpine.store('toasts').pushSimple('Supervisor updated','✏️', this.form.name);
-        this.closeModal(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to update supervisor'); console.error(e); }
-    },
-
-    confirmDeleteSupervisor(id){ if(confirm('Delete supervisor?')) this.deleteSupervisor(id); },
-
-    async deleteSupervisor(id){
-      try {
-        const { error } = await this.supabase.from('supervisors').delete().eq('supervisor_id', id);
-        if(error) throw error;
-        await this.logActivity('Deleted supervisor', `ID: ${id}`);
-        Alpine.store('toasts').pushSimple('Supervisor deleted','🗑️', `ID: ${id}`);
-        this.fetchSupervisors(); this.fetchAgents(); this.fetchPOS();
-      } catch(e){ alert(e.message || 'Failed to delete supervisor'); console.error(e); }
-    },
-
-    /* ---------- Agent CRUD ---------- */
-    async addAgentConfirm(){
-      if(!this.form.name || !this.form.supervisor_id) return alert('Name & Supervisor required');
-      try {
-        const { error } = await this.supabase.from('agents').insert([{ name: this.form.name, contact: this.form.contact, location: this.form.location, supervisor_id: this.form.supervisor_id }]);
-        if(error) throw error;
-        await this.logActivity('Added agent', `Name: ${this.form.name}`);
-        Alpine.store('toasts').pushSimple('Agent added','👤', this.form.name);
-        this.closeModal(); this.fetchAgents(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to add agent'); console.error(e); }
-    },
-
-    async updateAgentConfirm(){
-      try {
-        const { error } = await this.supabase.from('agents').update({ name: this.form.name, contact: this.form.contact, location: this.form.location, supervisor_id: this.form.supervisor_id }).eq('agent_id', this.form.agent_id);
-        if(error) throw error;
-        await this.logActivity('Edited agent', `ID: ${this.form.agent_id}`);
-        Alpine.store('toasts').pushSimple('Agent updated','✏️', this.form.name);
-        this.closeModal(); this.fetchAgents(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to update agent'); console.error(e); }
-    },
-
-    confirmDeleteAgent(id){ if(confirm('Delete agent?')) this.deleteAgent(id); },
-
-    async deleteAgent(id){
-      try {
-        const { error } = await this.supabase.from('agents').delete().eq('agent_id', id);
-        if(error) throw error;
-        await this.logActivity('Deleted agent', `ID: ${id}`);
-        Alpine.store('toasts').pushSimple('Agent deleted','🗑️', `ID: ${id}`);
-        this.fetchAgents(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to delete agent'); console.error(e); }
-    },
-
-    /* ---------- POS CRUD ---------- */
-    async addPOSConfirm(){
-      if(!this.form.serial_number) return alert('Serial required');
-      try {
-        const { error } = await this.supabase.from('pos_devices').insert([{ serial_number: this.form.serial_number, agent_id: this.form.agent_id || null, date_issued: null, status: this.form.status || 'Available', condition: this.form.condition || 'Good', notes: this.form.notes || '' }]);
-        if(error) throw error;
-        await this.logActivity('Added POS', `Serial: ${this.form.serial_number}`);
-        Alpine.store('toasts').pushSimple('POS added','📦', this.form.serial_number);
-        this.closeModal(); this.fetchPOS(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to add POS'); console.error(e); }
-    },
-
-    async updatePOSConfirm(){
-      try {
-        const { error } = await this.supabase.from('pos_devices').update({ serial_number: this.form.serial_number, agent_id: this.form.agent_id || null, status: this.form.status, condition: this.form.condition, notes: this.form.notes || '' }).eq('pos_id', this.form.pos_id);
-        if(error) throw error;
-        await this.logActivity('Edited POS', `POS ID: ${this.form.pos_id}`);
-        Alpine.store('toasts').pushSimple('POS updated','📦', this.form.serial_number);
-        this.closeModal(); this.fetchPOS(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to update POS'); console.error(e); }
-    },
-
-    confirmDeletePOS(id){ if(confirm('Delete POS?')) this.deletePOS(id); },
-
-    async deletePOS(id){
-      try {
-        const { error } = await this.supabase.from('pos_devices').delete().eq('pos_id', id);
-        if(error) throw error;
-        await this.logActivity('Deleted POS', `POS ID: ${id}`);
-        Alpine.store('toasts').pushSimple('POS deleted','📦', `ID: ${id}`);
-        this.fetchPOS(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to delete POS'); console.error(e); }
-    },
-
-    /* ---------- Activity logs & Notifications ---------- */
-    async logActivity(action, details=''){
-      try { await this.supabase.from('activity_logs').insert([{ user_role:'ICT', user_name:this.settings.admin_name||'ICT', action, details }]); } catch(e){ console.error(e); }
-      this.fetchActivityLogs();
-    },
-
-    async notifyDB(title, message, type='info'){ try { await this.supabase.from('notifications').insert([{ title, message, type }]); } catch(e){ console.error(e); } },
-
-    pushToast(title, emoji='🔔', message=''){
-      try { Alpine.store('toasts').pushSimple(title, emoji, message); } catch(e){
-        // fallback - local UI component
-        const comps = Array.from(document.querySelectorAll('[x-data]')).map(n => n.__x).filter(x => x && x.$data && x.$data.toasts !== undefined);
-        if(comps.length){ comps[0].$data.toasts.push({ title, message, emoji }); }
-      }
-    },
-
-    /* ---------- Charts ---------- */
-
-    toggleChartType() {
-      if (this._isToggling) return;
-      this._isToggling = true;
-
-      this.chartType = this.chartType === 'bar' ? 'pie' : 'bar';
-      localStorage.setItem('bst_chartType', this.chartType);
-
-      if (this.chartAgents) {
-        try { this.chartAgents.destroy(); } catch {}
-        this.chartAgents = null;
-      }
-
-      setTimeout(() => {
-        this.initChart();
-        this._isToggling = false;
-      }, 300);
-    },
-
-    /* ---------- Realtime (Supabase Realtime channels) ---------- */
-    setupRealtime(){
-      try {
-        const channel = this.supabase.channel('realtime-ict')
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'activity_logs' }, payload => {
-            try { Alpine.store('toasts').pushSimple(payload.new.action || 'Activity','🧾', payload.new.details || ''); } catch {}
-            this.fetchActivityLogs();
-          })
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'supervisors' }, payload => {
-            try { Alpine.store('toasts').pushSimple('Supervisor added','👥', payload.new.name || ''); } catch {}
-            this.fetchSupervisors();
-          })
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'agents' }, payload => {
-            try { Alpine.store('toasts').pushSimple('Agent added','👤', payload.new.name || ''); } catch {}
-            this.fetchAgents();
-          })
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'pos_devices' }, payload => {
-            try { Alpine.store('toasts').pushSimple('POS added','📦', payload.new.serial_number || ''); } catch {}
-            this.fetchPOS();
-          })
-          .subscribe();
-      } catch(e){ console.warn('Realtime setup failed', e); }
-    },
-
-    /* ---------- SETTINGS & BACKUP ---------- */
-    async loadSettings(){ try { const { data } = await this.supabase.from('settings').select('*').eq('id',1).maybeSingle(); if(data) this.settings = { ...this.settings, ...data }; } catch(e){ console.warn('loadSettings', e); } },
-    async saveSettings(){ try { await this.supabase.from('settings').upsert([{ id:1, admin_name:this.settings.admin_name, email:this.settings.email, theme:this.settings.theme, notifications:this.settings.notifications }], { onConflict:'id' }); Alpine.store('toasts').pushSimple('Settings saved','⚙️',''); await this.logActivity('Updated settings', `Admin: ${this.settings.admin_name}`); } catch(e){ alert('Error saving settings'); console.error(e); } },
-
-    async exportBackupJSON(){
-      try {
-        const [supRes, agRes, posRes, reqRes, logsRes] = await Promise.all([
-          this.supabase.from('supervisors').select('*'),
-          this.supabase.from('agents').select('*'),
-          this.supabase.from('pos_devices').select('*'),
-          this.supabase.from('pos_requests').select('*'),
-          this.supabase.from('activity_logs').select('*')
-        ]);
-        const payload = { supervisors: supRes.data||[], agents: agRes.data||[], pos_devices: posRes.data||[], pos_requests: reqRes.data||[], activity_logs: logsRes.data||[], settings: this.settings };
-        const blob = new Blob([JSON.stringify(payload,null,2)], { type:'application/json' });
-        const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`backup_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple('Backup downloaded','📥','');
-      } catch(e){ alert('Backup failed'); console.error(e); }
-    },
-
-    /* ---------- CSV / PDF exports ---------- */
-    async exportCSVServer(table){
-      try {
-        const { data, error } = await this.supabase.from(table).select('*');
-        if(error){ alert(error.message); return; }
-        if(!data || !data.length){ alert('No data to export'); return; }
-        const headers = Object.keys(data[0]);
-        const rows = data.map(r => headers.map(h => `"${String(r[h]||'').replace(/"/g,'""')}"`).join(','));
-        const csv = [headers.join(','), ...rows].join('\n');
-        const blob = new Blob([csv], { type:'text/csv' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`${table}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple('CSV exported','📤','');
-      } catch(e){ alert('CSV export failed'); console.error(e); }
-    },
-
-    async exportAgentsCSV(supervisor_id, supervisor_name){
-      try {
-        const { data: agents } = await this.supabase.from('agents').select('*').eq('supervisor_id', supervisor_id).order('name');
-        const { data: posList } = await this.supabase.from('pos_devices').select('*');
-        const rows = (agents || []).map(a => [ a.agent_id, a.name, a.contact, a.location, (posList||[]).filter(p => p.agent_id === a.agent_id).map(p => p.serial_number).join('; ') ]);
-        const headers = ['agent_id','name','contact','location','pos_assigned'];
-        const csv = [ headers.join(','), ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')) ].join('\n');
-        const blob = new Blob([csv], { type:'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `agents_${(supervisor_name||'sup').replace(/\s+/g,'_')}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple(`Agents exported (${supervisor_name||''})`,'📤','');
-      } catch(e){ alert('Agents CSV failed'); console.error(e); }
-    },
-
-    exportLogsCSV(){
-      try {
-        const rows = (this.activity_logs || []).map(l => [ l.id, l.user_role, l.user_name, (l.action||'').replace(/[\r\n]+/g,' '), (l.details||'').replace(/[\r\n]+/g,' '), l.created_at ]);
-        const headers = ['id','user_role','user_name','action','details','created_at'];
-        const csv = [ headers.join(','), ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')) ].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href = url; a.download = `activity_logs_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple('Logs exported','📤','');
-      } catch(e){ alert('Logs CSV failed'); console.error(e); }
-    },
-
-    async exportPDF(table){
-      try {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        const { data, error } = await this.supabase.from(table).select('*');
-        if(error){ alert(error.message); return; }
-        if(!data || !data.length){ alert('No data to export'); return; }
-        doc.text(`Report: ${table}`, 14, 18);
-        (doc).autoTable({ startY: 24, head: [Object.keys(data[0])], body: data.map(r => Object.values(r)) });
-        doc.save(`${table}_report_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.pdf`);
-        Alpine.store('toasts').pushSimple('PDF generated','🧾','');
-      } catch(e){ console.error(e); alert('PDF export failed'); }
-    },
-
-    async fetchAgentsPerSupervisor() {
-      try {
-        const { data: supervisors, error: supErr } = await this.supabase
-          .from('supervisors')
-          .select('supervisor_id, name');
-        if (supErr) throw supErr;
-
-        const { data: agents, error: agErr } = await this.supabase
-          .from('agents')
-          .select('agent_id, name, contact, supervisor_id');
-        if (agErr) throw agErr;
-
-        this.agentsPerSupervisor = supervisors.map(s => {
-          return {
-            supervisor: s.name,
-            agents: agents.filter(a => a.supervisor_id === s.supervisor_id)
-          }
-        });
-      } catch(e) {
-        console.error('fetchAgentsPerSupervisor', e);
-        alert('Failed to fetch report: ' + e.message);
-      }
-    },
-
-    exportAgentsPerSupervisorPDF() {
-      const { jsPDF } = window.jspdf;
-      const doc = new jsPDF();
-      let y = 10;
-      this.agentsPerSupervisor.forEach(group => {
-        doc.setFontSize(14);
-        doc.text(group.supervisor, 10, y);
-        y += 6;
-        doc.setFontSize(12);
-        group.agents.forEach(a => {
-          doc.text(`- ${a.name} (${a.contact || 'No contact'})`, 14, y);
-          y += 6;
-          if (y > 280) { doc.addPage(); y = 10; }
-        });
-        y += 4;
-      });
-      doc.save('Agents_Per_Supervisor.pdf');
-    },
-
-    exportAgentsPerSupervisorCSV() {
-      let csv = 'Supervisor,Agent Name,Contact\n';
-      this.agentsPerSupervisor.forEach(group => {
-        group.agents.forEach(a => {
-          csv += `"${group.supervisor}","${a.name}","${a.contact || ''}"\n`;
-        });
-      });
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'Agents_Per_Supervisor.csv';
-      link.click();
-      URL.revokeObjectURL(url);
-    },
-
-    /* ---------- Helpers ---------- */
-    pushToastSimple(title, emoji='🔔', message=''){
-      try { Alpine.store('toasts').pushSimple(title, emoji, message); } catch(e){ console.error(e); }
-    },
-
-    async logActivity(action, details=''){ try { await this.supabase.from('activity_logs').insert([{ user_role:'ICT', user_name:this.settings.admin_name || 'ICT', action, details }]); } catch(e){ console.error(e); } this.fetchActivityLogs(); },
-
-    notifyError(title, e){ try { Alpine.store('toasts').pushSimple(title,'⚠️', (e && e.message) ? e.message : String(e)); } catch(e2){} },
-
-    /* wrapper helpers used in UI */
-    confirmDeleteSupervisor(id){ if(confirm('Delete supervisor?')) this.deleteSupervisor(id); },
-    confirmDeleteAgent(id){ if(confirm('Delete agent?')) this.deleteAgent(id); },
-    confirmDeletePOS(id){ if(confirm('Delete POS?')) this.deletePOS(id); }
-  
-  };
-}
-
-
-/* When Alpine mounts, draw Lucide icons */
-document.addEventListener('alpine:init', () => {
-  try { lucide.createIcons(); } catch(e){}
-});
-</script>
- <style>
-  /* Modal fade-scale animation */
-  .fade-scale {
-    transform: scale(0.95);
-    opacity: 0;
-    transition: all 0.2s ease-in-out;
-  }
-  .fade-scale.show {
-    transform: scale(1);
-    opacity: 1;
-  }
-  /* Tailwind base styles */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
- </style>
- <script>
-function updateGreetingAndTime() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const seconds = now.getSeconds().toString().padStart(2, '0');
-
-    // Determine greeting
-    let greeting = '';
-    if (hours < 12) {
-        greeting = 'Good Morning🌅';
-    } else if (hours < 18) {
-        greeting = 'Good Afternoon🌞';
-    } else {
-        greeting = 'Good Evening🌜';
-    }
-
-    // Display greeting and time
-    document.getElementById('greeting').textContent = `${greeting}, Admin!`; // Change "Admin" to dynamic username if available
-    document.getElementById('time').textContent = `Current Time: ${hours}:${minutes}:${seconds}`;
-}
-
-// Initialize immediately
-updateGreetingAndTime();
-// Update every second
-setInterval(updateGreetingAndTime, 1000);
-</script>
-<script>
-  document.addEventListener('DOMContentLoaded', () => {
-  const assistantBtn = document.getElementById('assistantBtn');
-
-  assistantBtn.addEventListener('click', () => {
-    alert("Hi, I am currently under development");
-  });
-});
-
-</script>
-
 <script src="main.js"></script>
+
 </body>
 </html>

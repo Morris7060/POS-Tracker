@@ -46,7 +46,7 @@ Respond concisely and clearly.
     const data = await apiResponse.json();
 
     // Extract the AI reply (depends on API structure)
-    const reply = data?.choices?.[0]?.text || data?.reply || "Sorry, I couldn't answer that.";
+    const reply = data?.choices?.[0]?.text || data?.reply || "Sorry, I am still under Development.";
 
     res.json({ reply });
   } catch (error) {
