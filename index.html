@@ -1,558 +1,1073 @@
 <!doctype html>
-<html lang="en" x-data="app()" x-init="initApp()">
+<html lang="en" x-data="app()" x-init="initApp()" class="h-full bg-gray-50">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>ICT Admin — Enterprise POS Dashboard</title>
+  <title>Bluestar Lotto — POS Tracking</title>
   <link rel="icon" href="logo.png" type="image/png" />
 
-  <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
-  <script src="https://unpkg.com/lucide@latest"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
-  <link rel="stylesheet" href="./dist/output.css" />
-  
+  <script>
+    // ⚠️ WARNING: Please change this key in your Supabase dashboard immediately!
+    // For a production application, these keys should not be hardcoded in the frontend.
+    window.SUPABASE_URL = 'https://drvkqsjlartfeatujwzu.supabase.co';
+    window.SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRydmtxc2psYXJ0ZmVhdHVqd3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwODI0NjIsImV4cCI6MjA3NTY1ODQ2Mn0.GZpN-ciQaP25izB1f8OZaLOOstCuaKrfDSWnE7x_79c';
+  </script>
 
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<script src="https://unpkg.com/lucide@latest"></script>
+<script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+
+<script src="main.js"></script>
   <style>
-    [x-cloak]{display:none!important} 
-    .cursor-sort{cursor:pointer}
-    /* Modal slide-in animation */
-    .slide-in {
-      transform: translateX(100%);
-      transition: transform 0.3s ease-in-out;
-    }
-    .slide-in.show {
-      transform: translateX(0);
-    }
-    /* Modal fade-scale animation */
-    .fade-scale {
-      transform: scale(0.95);
-      opacity: 0;
-      transition: all 0.2s ease-in-out;
-    }
-    .fade-scale.show {
-      transform: scale(1);
-      opacity: 1;
-    }
-    /* Tailwind base styles (NOTE: Remove these from the <style> block and use a build process for production) */
-    @tailwind base;
-    @tailwind components;
-    @tailwind utilities;
+    [x-cloak] { display: none !important; }
   </style>
 </head>
-<body class="bg-white text-slate-900">
 
-<script>
-/* -----------------------
-  CONFIG: your Supabase (Must be defined before main.js runs)
------------------------ */
-const SUPABASE_URL = 'https://drvkqsjlartfeatujwzu.supabase.co';
-// Replace 'YOUR_SUPABASE_ANON_KEY' with your real key locally
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRydmtxc2psYXJ0ZmVhdHVqd3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAwODI0NjIsImV4cCI6MjA3NTY1ODQ2Mn0.GZpN-ciQaP25izB1f8OZaLOOstCuaKrfDSWnE7x_79c';
+<body class="h-full antialiased text-gray-800" x-cloak x-init="$watch('view', () => isSidebarOpen = false)">
 
-window.supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-</script>
-
-<div class="min-h-screen flex">
-
-  <aside class="w-72 bg-sky-800 text-white flex flex-col">
-    <div class="p-4 border-b border-sky-700 flex items-center gap-3">
-      <img src="image/logo (2).png" alt="Logo" class="w-10 h-10 object-contain rounded-sm shadow-sm" onerror="this.style.display='none'"/>
-      <div>
-        <div class="font-bold text-lg">ICT Admin</div>
-        <div class="text-xs opacity-80">POS Tracking </div>
-      </div>
-    </div>
-
-    <nav class="p-4 flex-1 space-y-1">
-      <button @click.prevent="nav('dashboard')" :class="view==='dashboard'?'bg-sky-700':''" class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-        <i data-lucide="layout-dashboard" class="w-5 h-5"></i><span>Dashboard</span>
-      </button>
-
-      <button @click.prevent="nav('supervisors')" 
-              :class="view==='supervisors'?'bg-sky-700':''"
-              class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-        <i data-lucide="users" class="w-5 h-5"></i><span>Supervisors</span>
-      </button>
-
-      <button @click.prevent="nav('agents')" :class="view==='agents'?'bg-sky-700':''" class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-        <i data-lucide="user" class="w-5 h-5"></i><span>Agents</span>
-      </button>
-
-      <button @click.prevent="nav('pos')" :class="view==='pos'?'bg-sky-700':''" class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-        <i data-lucide="tablet-smartphone" class="w-5 h-5"></i><span>POS Devices</span>
-      </button>
-
-      <button @click.prevent="nav('logs')" :class="view==='logs'?'bg-sky-700':''" class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-        <i data-lucide="activity" class="w-5 h-5"></i><span>Activity Logs</span>
-      </button>
-<button @click.prevent="nav('report'); fetchAgentsPerSupervisor()" 
-        :class="view==='report'?'bg-sky-700':''" 
-        class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-    <i data-lucide="file-text" class="w-5 h-5"></i><span>Report</span>
-</button>
-
-
-      <button @click.prevent="nav('settings')" :class="view==='settings'?'bg-sky-700':''" class="w-full text-left px-3 py-2 rounded flex items-center gap-3">
-        <i data-lucide="settings" class="w-5 h-5"></i><span>Settings</span>
-      </button>
-    </nav>
-
-    <div class="p-4 border-t border-sky-700 text-xs">
-      <div class="opacity-80">Signed in as</div>
-      <div class="font-semibold"> ICT Officer</div>
-    </div>
-  </aside>
-
-  <main class="flex-1 p-6 overflow-auto">
-    <header class="flex items-center justify-between mb-6">
-      <div>
-        <h1 id="pageTitle" class="text-2xl font-bold">Dashboard</h1>
-        <p id="pageSub" class="text-sm opacity-70">Enterprise POS — sorting, pagination, RLS-ready</p>
-      </div>
-
-      <div class="flex items-center gap-3">
-        <input x-model="globalSearch" @input="applySearch()" placeholder="Search supervisors, agents, POS..." class="p-2 border rounded w-80" aria-label="Global search" />
-        <button @click="refreshAll()" class="bg-white px-3 py-2 rounded border">🔄 Refresh</button>
-      </div>
-    </header>
-      <section x-show="view==='report'" x-cloak> <h2 class="text-2xl font-bold mb-4">Agents per Supervisor</h2>
-
-  <div class="mb-4">
-    <label for="supervisorSelect" class="font-semibold block mb-1">Select Supervisor:</label>
-    <select id="supervisorSelect" x-model="selectedSupervisorId"
-            class="w-full p-2 border rounded">
-      <option value="">-- Choose Supervisor --</option>
-      <template x-for="group in agentsPerSupervisor" :key="group.supervisor_id">
-        <option :value="group.supervisor_id" x-text="group.supervisor"></option>
+  <div aria-live="assertive" class="pointer-events-none fixed inset-0 flex items-end px-4 py-6 sm:items-start sm:p-6 z-50">
+    <div class="flex w-full flex-col items-center space-y-4 sm:items-end">
+      <template x-for="toast in $store.toasts.items" :key="toast.id">
+        <div x-show="toast.show" 
+             x-transition:enter="transform ease-out duration-300 transition"
+             x-transition:enter-start="translate-y-2 opacity-0 sm:translate-y-0 sm:translate-x-2"
+             x-transition:enter-end="translate-y-0 opacity-100 sm:translate-x-0"
+             x-transition:leave="transition ease-in duration-100"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="pointer-events-auto w-full max-w-sm overflow-hidden rounded-lg bg-white shadow-lg ring-1 ring-black ring-opacity-5 border-l-4"
+             :class="toast.borderClass"
+             role="alert">
+          <div class="p-4">
+            <div class="flex items-start">
+              <div class="flex-shrink-0" x-text="toast.emoji"></div>
+              <div class="ml-3 w-0 flex-1 pt-0.5">
+                <p class="text-sm font-medium text-gray-900" x-text="toast.title"></p>
+                <p class="mt-1 text-sm text-gray-500" x-text="toast.message"></p>
+              </div>
+              <div class="ml-4 flex flex-shrink-0">
+                <button @click="$store.toasts.remove(toast.id)" type="button" class="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2">
+                  <span class="sr-only">Close</span>
+                  <i data-lucide="x" class="h-5 w-5"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </template>
-    </select>
+    </div>
   </div>
+  
+  <div class="flex h-full">
 
-  <div class="bg-white rounded shadow p-4 overflow-auto max-h-[60vh]">
-    <template x-if="selectedSupervisorAgents.length > 0">
-      <table class="table-auto w-full border-collapse">
-        <thead>
-          <tr class="bg-gray-200">
-            <th class="border px-4 py-2">Agent Name</th>
-            <th class="border px-4 py-2">Contact</th>
-            <th class="border px-4 py-2">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <template x-for="(agent, index) in selectedSupervisorAgents" :key="agent.agent_id">
-            <tr :class="index % 2 === 0 ? 'bg-white' : 'bg-gray-50'">
-              <td class="border px-4 py-2" x-text="agent.name"></td>
-              <td class="border px-4 py-2" x-text="agent.contact || 'No contact'"></td>
-              <td class="border px-4 py-2 space-x-2">
-                <button class="bg-blue-500 text-white px-2 py-1 rounded"
-                        @click="openModal('editAgent', agent)">Edit</button>
-                <button class="bg-red-500 text-white px-2 py-1 rounded"
-                        @click="deleteAgent(agent)">Delete</button>
-              </td>
-            </tr>
-          </template>
-        </tbody>
-      </table>
-    </template>
-    <template x-if="selectedSupervisorAgents.length === 0">
-      <p class="text-gray-500">No agents available for this supervisor.</p>
-    </template>
-  </div>
-
-<div class="flex space-x-4">
-    <button 
-        class="bg-white text-sky-700 px-3 py-2 rounded border flex items-center space-x-2" 
-        @click="exportAgentsPerSupervisorPDF()"
-    >
-        <i data-lucide="file-text" class="w-4 h-4"></i>
-        <span>Export PDF Report</span>
-    </button>
-    
-    <button 
-        class="bg-white text-sky-700 px-3 py-2 rounded border flex items-center space-x-2" 
-        @click="exportAgentsPerSupervisorCSV()"
-    >
-        <i data-lucide="download" class="w-4 h-4"></i>
-        <span>Export CSV Report</span>
-    </button>
-</div>
-</section>
-</section>
-
-<div class="p-4 bg-white rounded-2xl shadow-md mb-6 flex flex-col items-start">
-  <h2 id="greeting" class="text-2xl font-bold text-gray-800"></h2>
-  <p id="time" class="text-lg text-gray-500"></p>
-</div>
-
-</section>
-
-<div class="p-4 sm:p-6 lg:p-8">
-
-    <div class="p-4 bg-white rounded-2xl shadow-md mb-6 flex flex-col items-start">
-        <h2 id="greeting" class="text-xl sm:text-2xl font-bold text-gray-800"></h2>
-        <p id="time" class="text-sm sm:text-lg text-gray-500"></p>
+    <div x-show="!isAppLoaded" 
+         x-transition:leave.duration.500ms 
+         class="fixed inset-0 z-[100] flex flex-col items-center justify-center bg-gray-50/90 backdrop-blur-sm">
+      
+      <div class="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-sky-600"></div>
+      
+      <p class="mt-4 text-sky-700 text-lg font-semibold">
+          Bluestar Lotto POS Portal is Loading...
+      </p>
+      <p class="text-sm text-gray-500">
+          Fetching essential data and logs.... Please wait.
+      </p>
     </div>
 
-    <section x-show="view==='dashboard'" x-cloak>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold">Supervisors</h3>
-                <p class="text-2xl font-bold text-slate-700" x-text="counts.supervisors"></p>
-            </div>
+    <div x-data="{ isSidebarOpen: false }"
+         x-init="isSidebarOpen = (window.innerWidth >= 1024)"
+         @resize.window="isSidebarOpen = (window.innerWidth >= 1024)"
+         :class="{'w-64': isSidebarOpen, 'w-0': !isSidebarOpen, 'hidden lg:flex': !isSidebarOpen && window.innerWidth < 1024}"
+         class="fixed inset-y-0 left-0 lg:static flex-col bg-sky-700 text-white shadow-xl z-30 transition-all duration-300 ease-in-out lg:flex lg:w-64 overflow-hidden"
+    >
+      
+      <div class="p-4 flex items-center border-b border-sky-600 flex-shrink-0">
+        <img src="image/logo (2).png" alt="Bluestar Lotto Logo" class="w-8 h-8 mr-3 rounded-full">
+        <h1 class="text-xl font-bold">Bluestar Lotto POS Tracking System</h1>
+      </div>
 
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold">Agents</h3>
-                <p class="text-2xl font-bold text-slate-700" x-text="counts.agents"></p>
-            </div>
+      <nav class="flex-1 p-4 space-y-2 overflow-y-auto" aria-label="Main Navigation">
+        
+        <button @click="view = 'dashboard'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'dashboard', 'hover:bg-sky-600': view !== 'dashboard'}" class="w-full flex items-center p-3 rounded-lg transition duration-150" aria-current="page">
+          <i data-lucide="layout-dashboard" class="w-5 h-5 mr-3"></i>
+          <span>Dashboard</span>
+        </button>
 
-            <div class="bg-white p-4 rounded shadow">
-                <h3 class="text-lg font-semibold">POS Devices</h3>
-                <p class="text-2xl font-bold text-slate-700" x-text="counts.pos"></p>
-            </div>
+        <button @click="view = 'supervisors'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'supervisors', 'hover:bg-sky-600': view !== 'supervisors'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="users" class="w-5 h-5 mr-3"></i>
+          <span>Supervisors</span>
+        </button>
+        
+        <button @click="view = 'agents'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'agents', 'hover:bg-sky-600': view !== 'agents'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="user-check" class="w-5 h-5 mr-3"></i>
+          <span>Agents</span>
+        </button>
+
+        <button @click="view = 'pos'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'pos', 'hover:bg-sky-600': view !== 'pos'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="tablet" class="w-5 h-5 mr-3"></i>
+          <span>POS Devices</span>
+        </button>
+        
+        <button @click="view = 'maintenance'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'maintenance', 'hover:bg-sky-600': view !== 'maintenance'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="wrench" class="w-5 h-5 mr-3"></i>
+          <span>Maintenance</span>
+        </button>
+        
+        <button @click="view = 'updates'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'updates', 'hover:bg-sky-600': view !== 'updates'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="cloud-upload" class="w-5 h-5 mr-3"></i>
+          <span>Updates</span>
+        </button>
+
+        <button @click="view = 'alerts'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'alerts', 'hover:bg-sky-600': view !== 'alerts'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="alert-triangle" class="w-5 h-5 mr-3"></i>
+          <span>Alerts</span>
+        </button>
+
+        <button @click="view = 'audit-log'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'audit-log', 'hover:bg-sky-600': view !== 'audit-log'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="gavel" class="w-5 h-5 mr-3"></i>
+          <span>Audit Log</span>
+        </button>
+
+        <button @click="view = 'integrations'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'integrations', 'hover:bg-sky-600': view !== 'integrations'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="plug" class="w-5 h-5 mr-3"></i>
+          <span>Integrations</span>
+        </button>
+        
+        <button @click="view = 'reports'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'reports', 'hover:bg-sky-600': view !== 'reports'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="file-text" class="w-5 h-5 mr-3"></i>
+          <span>Reports & Logs</span>
+        </button>
+
+        <button @click="view = 'settings'; showNotificationsSidebar = false; isSidebarOpen = window.innerWidth >= 1024" :class="{'bg-sky-800': view === 'settings', 'hover:bg-sky-600': view !== 'settings'}" class="w-full flex items-center p-3 rounded-lg transition duration-150">
+          <i data-lucide="settings" class="w-5 h-5 mr-3"></i>
+          <span>Settings</span>
+        </button>
+        
+      </nav>
+
+      <div class="p-4 border-t border-sky-600 flex items-center flex-shrink-0">
+        <div class="w-10 h-10 bg-sky-500 rounded-full flex items-center justify-center font-bold text-xl mr-3" aria-hidden="true">
+          <i data-lucide="user" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <p class="text-sm font-semibold" x-text="currentUser ? currentUser.name : 'Loading...'"></p>
+          <p class="text-xs text-sky-200" x-text="currentUser ? currentUser.role.toUpperCase() : '...'"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="flex-1 flex flex-col overflow-hidden">
+      
+      <header class="p-4 bg-white shadow-md flex justify-between items-center z-10">
+        <div class="flex items-center">
+          <button @click="isSidebarOpen = !isSidebarOpen" class="lg:hidden p-2 mr-3 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition duration-150" aria-label="Toggle Sidebar">
+            <i :data-lucide="isSidebarOpen ? 'x' : 'menu'" class="w-6 h-6"></i>
+          </button>
+          
+          <h2 id="greeting" class="text-lg sm:text-2xl font-semibold text-gray-700 mr-6">Welcome, User!</h2>
+          <div class="relative hidden sm:block">
+            <input x-model="globalSearch" type="search" placeholder="Search Supervisors, Agents or POS..." class="w-40 sm:w-80 p-2 pl-10 border border-gray-300 rounded-lg focus:ring-sky-500 focus:border-sky-500 text-sm" aria-label="Global Search">
+            <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+          </div>
         </div>
 
-        <div class="bg-white p-4 rounded shadow mt-6 mx-auto w-full lg:max-w-5xl">
-            <div class="flex items-center justify-between mb-2">
-                <h3 class="text-lg font-semibold">Agents per Supervisor</h3>
-                <button
-                    class="bg-slate-100 hover:bg-slate-200 px-3 py-1 rounded text-sm flex items-center gap-1"
-                    @click="toggleChartType()"
-                    aria-pressed="false"
-                >
-                    <i data-lucide="refresh-cw" class="w-4 h-4"></i>
-                    <span x-text="chartType === 'bar' ? 'Switch to Pie' : 'Switch to Bar'"></span>
+        <div class="flex items-center space-x-4">
+          <p id="time" class="text-xs sm:text-sm text-gray-500 font-medium"></p>
+          
+          <button @click="showNotificationsSidebar = !showNotificationsSidebar" class="relative p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition duration-150" title="Notifications & Activity" aria-expanded="false" :aria-controls="showNotificationsSidebar ? 'notifications-sidebar' : null">
+            <i data-lucide="bell" class="w-5 h-5"></i>
+            <span class="absolute top-0 right-0 block h-3 w-3 rounded-full ring-2 ring-white bg-red-500" x-show="activityLogs.length > 0"></span>
+          </button>
+          
+          <button @click="aiChatWindowOpen = !aiChatWindowOpen" class="p-2 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 transition duration-150" title="Open AI Assistant" :class="{'text-sky-600 ring-2 ring-sky-500': aiChatWindowOpen}">
+            <i data-lucide="bot" class="w-5 h-5"></i>
+          </button>
+        </div>
+      </header>
+      
+      <main class="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 bg-gray-50">
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'dashboard'" x-transition:enter.duration.500ms>
+          <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">System Overview</h3>
+
+          <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
+            <div class="bg-white p-5 rounded-xl shadow-lg border-l-4 border-sky-500">
+              <p class="text-sm font-medium text-gray-500">Supervisors</p>
+              <div class="flex items-center justify-between">
+                <p class="text-3xl font-bold text-gray-900 mt-1" x-text="counts.supervisors"></p>
+                <i data-lucide="users" class="w-6 h-6 text-sky-500"></i>
+              </div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-lg border-l-4 border-indigo-500">
+              <p class="text-sm font-medium text-gray-500">Agents</p>
+              <div class="flex items-center justify-between">
+                <p class="text-3xl font-bold text-gray-900 mt-1" x-text="counts.agents"></p>
+                <i data-lucide="user-check" class="w-6 h-6 text-indigo-500"></i>
+              </div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-lg border-l-4 border-green-500">
+              <p class="text-sm font-medium text-gray-500">POS Devices</p>
+              <div class="flex items-center justify-between">
+                <p class="text-3xl font-bold text-gray-900 mt-1" x-text="counts.pos"></p>
+                <i data-lucide="tablet" class="w-6 h-6 text-green-500"></i>
+              </div>
+            </div>
+            <div class="bg-white p-5 rounded-xl shadow-lg border-l-4 border-red-500">
+              <p class="text-sm font-medium text-gray-500">Pending Requests</p>
+              <div class="flex items-center justify-between">
+                <p class="text-3xl font-bold text-gray-900 mt-1" x-text="counts.requests_pending"></p>
+                <i data-lucide="alert-triangle" class="w-6 h-6 text-red-500"></i>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+              <h4 class="text-lg font-semibold mb-4 text-gray-800">Agents Assigned per Supervisor</h4>
+              <div class="h-80">
+                <canvas id="agentsChart" role="img" aria-label="Chart showing number of agents per supervisor"></canvas>
+              </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                <h4 class="text-lg font-semibold mb-4 text-gray-800">POS Device Condition Overview</h4>
+                <div class="h-80 flex items-center justify-center">
+                    <canvas id="posConditionChart" role="img" aria-label="Pie chart showing overview of POS device conditions"></canvas>
+                </div>
+            </div>
+
+          </div>
+
+          <div class="mt-8 bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+            <h4 class="text-lg font-semibold mb-4 text-gray-800">Quick Actions</h4>
+            <div class="flex flex-wrap gap-3 sm:space-x-4">
+              <button @click="openModal('add-supervisor', 'Add New Supervisor')" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                <i data-lucide="user-plus" class="w-5 h-5 mr-2"></i>
+                Add Supervisor
+              </button>
+              <button @click="openModal('add-agent', 'Register New Agent')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                <i data-lucide="user-check" class="w-5 h-5 mr-2"></i>
+                Register Agent
+              </button>
+              <button @click="openModal('add-pos', 'Add New POS Device')" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                <i data-lucide="tablet" class="w-5 h-5 mr-2"></i>
+                Add POS
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'supervisors'" x-transition:enter.duration.500ms>
+          <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">Supervisors Management</h3>
+          
+          <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-2 sm:space-y-0">
+              <p class="text-lg font-medium text-gray-800" x-text="'Total Supervisors: ' + counts.supervisors"></p>
+              <button @click="openModal('add-supervisor', 'Add New Supervisor')" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                <i data-lucide="user-plus" class="w-5 h-5 mr-2"></i>
+                Add Supervisor
+              </button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <caption class="sr-only">List of all Supervisors</caption>
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Region</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Contact</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <template x-for="supervisor in filteredSupervisors()" :key="supervisor.supervisor_id">
+                    <tr>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="supervisor.supervisor_id"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="supervisor.name"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="supervisor.region"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="supervisor.contact"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button @click="openModal('edit-supervisor', 'Edit Supervisor', supervisor)" class="text-indigo-600 hover:text-indigo-900" title="Edit Supervisor Details">
+                          <i data-lucide="edit" class="w-4 h-4"></i>
+                        </button>
+                        <button @click="openModal('delete-supervisor', 'Delete Supervisor', supervisor)" class="text-red-600 hover:text-red-900" title="Delete Supervisor">
+                          <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <p x-show="filteredSupervisors().length === 0" class="mt-4 text-center text-gray-500">No supervisors found.</p>
+          </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'agents'" x-transition:enter.duration.500ms>
+          <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">Agents Management</h3>
+          <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-2 sm:space-y-0">
+              <div class="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-4">
+                <p class="text-lg font-medium text-gray-800" x-text="'Total Agents: ' + counts.agents"></p>
+                <select x-model="selectedSupervisorFilterId" @change="prepareAgentSupervisorData(); initAgentsChart()" class="border-gray-300 rounded-lg text-sm focus:ring-sky-500 focus:border-sky-500" aria-label="Filter Agents by Supervisor">
+                  <option value="">All Supervisors</option>
+                  <template x-for="supervisor in supervisors" :key="supervisor.supervisor_id">
+                    <option :value="supervisor.supervisor_id" x-text="supervisor.name"></option>
+                  </template>
+                </select>
+              </div>
+              <button @click="openModal('add-agent', 'Register New Agent')" class="bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                <i data-lucide="user-check" class="w-5 h-5 mr-2"></i>
+                Register Agent
+              </button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <caption class="sr-only">List of all Agents</caption>
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Supervisor</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <template x-for="agent in filteredAgents()" :key="agent.agent_id">
+                    <tr>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="agent.agent_id"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="agent.name"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="agent.supervisor_name"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="agent.location"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button @click="openModal('edit-agent', 'Edit Agent', agent)" class="text-indigo-600 hover:text-indigo-900" title="Edit Agent Details">
+                          <i data-lucide="edit" class="w-4 h-4"></i>
+                        </button>
+                        <button @click="openModal('delete-agent', 'Delete Agent', agent)" class="text-red-600 hover:text-red-900" title="Delete Agent">
+                          <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <p x-show="filteredAgents().length === 0" class="mt-4 text-center text-gray-500">No agents found.</p>
+          </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'pos'" x-transition:enter.duration.500ms>
+          <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">POS Devices Management</h3>
+          <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 space-y-2 sm:space-y-0">
+              <p class="text-lg font-medium text-gray-800" x-text="'Total POS Devices: ' + counts.pos"></p>
+              <button @click="openModal('add-pos', 'Add New POS Device')" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                <i data-lucide="tablet" class="w-5 h-5 mr-2"></i>
+                Add POS Device
+              </button>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="min-w-full divide-y divide-gray-200">
+                <caption class="sr-only">List of all POS Devices</caption>
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial No.</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Assigned Agent</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Model</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Issued</th>
+                    <th scope="col" class="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                  <template x-for="pos in filteredPOS()" :key="pos.serial_number">
+                    <tr>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="pos.serial_number"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900" x-text="pos.agent_name || 'Unassigned'"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="pos.model"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full"
+                          :class="{
+                            'bg-green-100 text-green-800': pos.status === 'Operational',
+                            'bg-yellow-100 text-yellow-800': pos.status === 'Maintenance',
+                            'bg-red-100 text-red-800': pos.status === 'Faulty',
+                            'bg-gray-100 text-gray-800': pos.status === 'Retired'
+                          }"
+                          x-text="pos.status"></span>
+                      </td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="pos.formatted_date_issued || 'N/A'"></td>
+                      <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button @click="openModal('edit-pos', 'Edit POS Device', pos)" class="text-indigo-600 hover:text-indigo-900" title="Edit POS Details">
+                          <i data-lucide="edit" class="w-4 h-4"></i>
+                        </button>
+                        <button @click="openModal('delete-pos', 'Delete POS Device', pos)" class="text-red-600 hover:text-red-900" title="Delete POS">
+                          <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+            <p x-show="filteredPOS().length === 0" class="mt-4 text-center text-gray-500">No POS devices found.</p>
+          </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'maintenance'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">Maintenance & Repair Tracking</h3>
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                <h4 class="text-lg font-medium mb-4 text-gray-800">Pending Faulty Devices (Requests: <span x-text="counts.requests_pending"></span>)</h4>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <caption class="sr-only">List of POS Devices requiring Maintenance</caption>
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Serial No.</th>
+                                <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Agent</th>
+                                <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th scope="col" class="px-3 sm:px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Reported</th>
+                                <th scope="col" class="px-3 sm:px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            <template x-for="pos in posDevices.filter(p => p.status === 'Faulty')" :key="pos.serial_number">
+                                <tr>
+                                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-900" x-text="pos.serial_number"></td>
+                                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="pos.agent_name || 'N/A'"></td>
+                                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800" x-text="pos.status"></span>
+                                    </td>
+                                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-sm text-gray-500" x-text="pos.date_issued ? 'Since ' + formatDate(pos.date_issued) : 'N/A'"></td>
+                                    <td class="px-3 sm:px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <button @click="openModal('update-maintenance', 'Update Maintenance Status', pos)" class="text-sky-600 hover:text-sky-900 font-semibold" title="Mark as In Progress or Repaired">
+                                            Update Status
+                                        </button>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+                <p x-show="posDevices.filter(p => p.status === 'Faulty').length === 0" class="mt-4 text-center text-gray-500">No faulty devices requiring maintenance currently.</p>
+            </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'alerts'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">System Alerts & Notifications</h3>
+            
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 space-y-2 sm:space-y-0 sm:space-x-4">
+                    <h4 class="text-lg font-medium text-gray-800">Active Alerts (<span x-text="filteredAlerts().length"></span>)</h4>
+                    <div class="flex space-x-2">
+                        <select x-model="alertFilters.status" class="border-gray-300 rounded-lg text-sm focus:ring-sky-500 focus:border-sky-500" aria-label="Filter by Status">
+                            <option value="ALL">All Statuses</option>
+                            <option value="New">New</option>
+                            <option value="In Progress">In Progress</option>
+                            <option value="Resolved">Resolved</option>
+                        </select>
+                        <select x-model="alertFilters.severity" class="border-gray-300 rounded-lg text-sm focus:ring-sky-500 focus:border-sky-500" aria-label="Filter by Severity">
+                            <option value="ALL">All Severities</option>
+                            <option value="Critical">Critical</option>
+                            <option value="Warning">Warning</option>
+                            <option value="Info">Info</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <template x-for="alert in filteredAlerts()" :key="alert.id">
+                        <div class="p-4 rounded-lg border-l-4 shadow-sm transition duration-150 ease-in-out"
+                             :class="{
+                                'border-red-500 bg-red-50': alert.severity === 'Critical',
+                                'border-yellow-500 bg-yellow-50': alert.severity === 'Warning',
+                                'border-sky-500 bg-sky-50': alert.severity === 'Info',
+                                'opacity-60': alert.status === 'Resolved'
+                             }">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p class="text-sm font-semibold text-gray-900" x-text="alert.title"></p>
+                                    <p class="text-xs text-gray-600 mt-1" x-text="alert.description"></p>
+                                    <div class="mt-2 flex items-center space-x-3 text-xs">
+                                        <span class="font-medium" 
+                                              :class="{
+                                                  'text-red-700': alert.severity === 'Critical',
+                                                  'text-yellow-700': alert.severity === 'Warning',
+                                                  'text-sky-700': alert.severity === 'Info'
+                                              }"
+                                              x-text="alert.severity.toUpperCase()"></span>
+                                        <span class="text-gray-500">|</span>
+                                        <span class="text-gray-500" x-text="'Time: ' + formatAlertTime(alert.created_at)"></span>
+                                    </div>
+                                </div>
+                                
+                                <div class="flex flex-col items-end space-y-1">
+                                    <span class="px-3 py-1 text-xs font-semibold rounded-full"
+                                          :class="{
+                                            'bg-red-200 text-red-800': alert.status === 'New',
+                                            'bg-yellow-200 text-yellow-800': alert.status === 'In Progress',
+                                            'bg-green-200 text-green-800': alert.status === 'Resolved',
+                                          }"
+                                          x-text="alert.status"></span>
+                                    
+                                    <div class="flex space-x-1" x-show="alert.status !== 'Resolved'">
+                                        <button @click="updateAlertStatus(alert.id, 'In Progress')" class="text-xs text-yellow-700 hover:text-yellow-900 font-medium" title="Mark as In Progress">
+                                            <i data-lucide="loader-2" class="w-4 h-4 inline-block mr-1"></i>
+                                            Progress
+                                        </button>
+                                        <button @click="updateAlertStatus(alert.id, 'Resolved')" class="text-xs text-green-700 hover:text-green-900 font-medium" title="Mark as Resolved">
+                                            <i data-lucide="check-circle" class="w-4 h-4 inline-block mr-1"></i>
+                                            Resolve
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <p x-show="filteredAlerts().length === 0" class="mt-4 text-center text-gray-500">No alerts match your current filters.</p>
+            </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'audit-log'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">System Audit Log</h3>
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                <div class="flex flex-col sm:flex-row justify-between items-center mb-4 space-y-2 sm:space-y-0">
+                    <h4 class="text-lg font-medium text-gray-800">Recent Activity</h4>
+                    <div class="flex space-x-2">
+                        <input x-model="logFilters.searchQuery" type="search" placeholder="Search by details..." class="border-gray-300 rounded-lg text-sm focus:ring-sky-500 focus:border-sky-500 w-32 sm:w-40" aria-label="Search Audit Log">
+                        <select x-model="logFilters.actionType" class="border-gray-300 rounded-lg text-sm focus:ring-sky-500 focus:border-sky-500" aria-label="Filter by Action Type">
+                            <option value="ALL">All Actions</option>
+                            <option value="ADD">Add</option>
+                            <option value="UPDATE">Update</option>
+                            <option value="DELETE">Delete</option>
+                            <option value="LOGIN">Login</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="space-y-4 max-h-96 overflow-y-auto pr-2">
+                    <template x-for="log in filteredActivityLogs()" :key="log.id">
+                        <div class="p-3 rounded-lg border-l-4 border-gray-200 bg-gray-50">
+                            <div class="flex justify-between items-start">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-sm font-semibold" 
+                                          :class="{
+                                              'text-green-700': log.action.includes('ADD'),
+                                              'text-indigo-700': log.action.includes('UPDATE'),
+                                              'text-red-700': log.action.includes('DELETE'),
+                                              'text-sky-700': log.action.includes('LOGIN')
+                                          }"
+                                          x-text="log.action"></span>
+                                    <span class="text-xs text-gray-500">by <span class="font-medium" x-text="log.details.user_role"></span> (<span x-text="log.user_id"></span>)</span>
+                                </div>
+                                <div class="text-xs text-gray-400 flex flex-col items-end">
+                                    <span x-text="formatLogDate(log.created_at)"></span>
+                                    <span x-text="formatLogTime(log.created_at)"></span>
+                                </div>
+                            </div>
+                            <p class="text-xs text-gray-600 mt-1" x-text="JSON.stringify(log.details)"></p>
+                        </div>
+                    </template>
+                </div>
+                <p x-show="filteredActivityLogs().length === 0" class="mt-4 text-center text-gray-500">No audit logs found matching the filter.</p>
+            </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'reports'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">Reports & Export</h3>
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                <p class="text-gray-700 mb-4">Generate and export reports for key data tables.</p>
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <p class="font-medium text-gray-800">Supervisors Report (.PDF)</p>
+                        <button @click="exportToPDF('supervisors')" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg flex items-center text-sm">
+                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                            Generate PDF
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <p class="font-medium text-gray-800">Agents Report (.PDF)</p>
+                        <button @click="exportToPDF('agents')" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg flex items-center text-sm">
+                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                            Generate PDF
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <p class="font-medium text-gray-800">POS Devices Report (.PDF)</p>
+                        <button @click="exportToPDF('pos')" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg flex items-center text-sm">
+                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                            Generate PDF
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50">
+                        <p class="font-medium text-gray-800">Maintenance Report (.PDF)</p>
+                        <button @click="exportToPDF('maintenance')" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-1 px-3 rounded-lg flex items-center text-sm">
+                            <i data-lucide="file-text" class="w-4 h-4 mr-2"></i>
+                            Generate PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'updates'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">Software Updates</h3>
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                <h4 class="text-lg font-medium mb-4 text-gray-800">Current System Version: <span x-text="updates.currentVersion" class="text-sky-600"></span></h4>
+                <p class="text-gray-700 mb-6">Manage system updates and check for new releases.</p>
+
+                <div class="space-y-4">
+                    <div class="flex items-center justify-between p-3 border rounded-lg bg-green-50 border-green-200">
+                        <div class="flex items-center">
+                            <i data-lucide="check-circle" class="w-5 h-5 text-green-600 mr-3"></i>
+                            <p class="font-medium text-green-800">No new updates found.</p>
+                        </div>
+                        <p class="text-sm text-green-600">Last checked: Today</p>
+                    </div>
+
+                    <div class="p-3 border rounded-lg">
+                        <p class="font-medium text-gray-800 mb-2">Update History</p>
+                        <ul class="text-sm text-gray-600 space-y-1 list-disc list-inside">
+                            <li>v2.1.0: AI Chatbot (SENIOR MAN) integration and performance upgrades.</li>
+                            <li>v2.0.0: Complete rewrite with Alpine.js and Supabase, added Audit Log.</li>
+                            <li>v1.5.0: Added Supervisors and Agents relationship.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+        
+        <section class="mt-4 sm:mt-8" x-show="view === 'integrations'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">System Integrations</h3>
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                <p class="text-gray-700 mb-6">Manage connections to external services.</p>
+
+                <div class="space-y-4">
+                    <div class="p-4 border rounded-lg border-sky-200 bg-sky-50 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i data-lucide="database" class="w-6 h-6 text-sky-600 mr-4"></i>
+                            <div>
+                                <p class="font-semibold text-sky-800">Supabase Backend</p>
+                                <p class="text-sm text-sky-700">Database & Realtime Subscriptions</p>
+                            </div>
+                        </div>
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full bg-green-200 text-green-800">CONNECTED</span>
+                    </div>
+
+                    <div class="p-4 border rounded-lg border-indigo-200 bg-indigo-50 flex items-center justify-between">
+                        <div class="flex items-center">
+                            <i data-lucide="bot" class="w-6 h-6 text-indigo-600 mr-4"></i>
+                            <div>
+                                <p class="font-semibold text-indigo-800">AI Chatbot Service</p>
+                                <p class="text-sm text-indigo-700">VANGUARD Asset Assistant</p>
+                            </div>
+                        </div>
+                        <button @click="view = 'settings'; $nextTick(() => document.getElementById('ai-api-key').focus())" class="text-sm text-indigo-600 hover:text-indigo-800 font-medium">
+                            <i data-lucide="settings-2" class="w-4 h-4 inline-block mr-1"></i>
+                            Configure
+                        </button>
+                    </div>
+
+                    <div class="p-4 border rounded-lg flex items-center justify-between opacity-50">
+                        <div class="flex items-center">
+                            <i data-lucide="layout-grid" class="w-6 h-6 text-gray-500 mr-4"></i>
+                            <div>
+                                <p class="font-semibold text-gray-800">Accounting System</p>
+                                <p class="text-sm text-gray-700">Financial Reporting Link</p>
+                            </div>
+                        </div>
+                        <span class="px-3 py-1 text-xs font-semibold rounded-full bg-red-200 text-red-800">DISCONNECTED</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'settings'" x-transition:enter.duration.500ms>
+            <h3 class="text-xl sm:text-2xl font-semibold mb-4 text-sky-700">Application Settings</h3>
+            <div class="bg-white p-4 sm:p-6 rounded-xl shadow-lg border border-gray-100">
+                
+                <h4 class="text-lg font-medium mb-4 text-gray-800 border-b pb-2">User Profile</h4>
+                <div class="space-y-4 mb-6">
+                    <div>
+                        <label for="admin-name" class="block text-sm font-medium text-gray-700">Admin Name</label>
+                        <input x-model="settings.admin_name" type="text" id="admin-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm">
+                    </div>
+                    <div>
+                        <label for="admin-email" class="block text-sm font-medium text-gray-700">Email Address</label>
+                        <input x-model="settings.email" type="email" id="admin-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm">
+                    </div>
+                </div>
+                
+                <h4 class="text-lg font-medium mb-4 text-gray-800 border-b pb-2">AI Chatbot Configuration</h4>
+                <div class="space-y-4">
+                    <div>
+                        <label for="ai-api-url" class="block text-sm font-medium text-gray-700">AI API Endpoint (URL)</label>
+                        <input x-model="aiConfig.AI_API_URL" type="url" id="ai-api-url" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm" placeholder="e.g., https://api.openai.com/v1/chat/completions">
+                        <p class="mt-1 text-xs text-gray-500">The endpoint for your chosen Large Language Model API.</p>
+                    </div>
+                    <div>
+                        <label for="ai-api-key" class="block text-sm font-medium text-gray-700">AI API Key (Secret)</label>
+                        <input x-model="aiConfig.AI_API_KEY" type="password" id="ai-api-key" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm" placeholder="sk-...">
+                        <p class="mt-1 text-xs text-red-500">⚠️ Never commit secret keys to a public repository.</p>
+                    </div>
+                    <div>
+                        <label for="ai-model" class="block text-sm font-medium text-gray-700">AI Model</label>
+                        <select x-model="aiConfig.AI_MODEL" id="ai-model" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm">
+                            <option value="gemini-2.5-flash">Gemini 2.5 Flash (Recommended)</option>
+                            <option value="gpt-4o">GPT-4o (OpenAI)</option>
+                            <option value="llama3-8b">Llama 3 8B (Custom/Other)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex justify-end">
+                    <button @click="saveSettings()" class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center shadow-md text-sm">
+                        <i data-lucide="save" class="w-5 h-5 mr-2"></i>
+                        Save Settings
+                    </button>
+                </div>
+            </div>
+        </section>
+
+
+        <section class="mt-4 sm:mt-8" x-show="view === 'placeholder-view'" x-transition:enter.duration.500ms>
+            <div class="bg-white p-6 rounded-xl shadow-lg border border-gray-100 text-center">
+                <i data-lucide="hard-hat" class="w-10 h-10 text-yellow-500 mx-auto mb-3"></i>
+                <h3 class="text-xl font-semibold text-gray-700">Under Construction</h3>
+                <p class="text-gray-500 mt-2">This feature is still being developed. Check back soon!</p>
+            </div>
+        </section>
+
+      </main>
+      
+    </div>
+    
+    <div x-show="showNotificationsSidebar" 
+         @click.outside="showNotificationsSidebar = false" 
+         x-transition:enter="transition ease-in-out duration-300"
+         x-transition:enter-start="translate-x-full"
+         x-transition:enter-end="translate-x-0"
+         x-transition:leave="transition ease-in-out duration-300"
+         x-transition:leave-start="translate-x-0"
+         x-transition:leave-end="translate-x-full"
+         class="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl z-40 flex flex-col"
+         id="notifications-sidebar" role="dialog" aria-modal="true" aria-labelledby="notifications-title">
+        
+        <div class="p-4 flex items-center justify-between border-b">
+            <h2 id="notifications-title" class="text-lg font-semibold text-gray-800">Activity & Notifications</h2>
+            <button @click="showNotificationsSidebar = false" class="p-1 rounded-full text-gray-400 hover:text-gray-600">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+        
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+            <template x-for="log in activityLogs" :key="log.id">
+                <div class="flex items-start space-x-3 p-2 hover:bg-gray-50 rounded-lg transition duration-100">
+                    <div class="flex-shrink-0 pt-1">
+                        <i :data-lucide="log.action.includes('ADD') ? 'plus-circle' : log.action.includes('UPDATE') ? 'refresh-cw' : log.action.includes('DELETE') ? 'trash-2' : 'alert-triangle'" 
+                           class="w-5 h-5" 
+                           :class="{'text-green-500': log.action.includes('ADD'), 'text-indigo-500': log.action.includes('UPDATE'), 'text-red-500': log.action.includes('DELETE'), 'text-yellow-500': !log.action.includes('ADD') && !log.action.includes('UPDATE') && !log.action.includes('DELETE')}">
+                        </i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-medium text-gray-800" x-text="log.action"></p>
+                        <p class="text-xs text-gray-600" x-text="log.details.entity_id ? log.details.entity_type + ' ID: ' + log.details.entity_id : 'System Activity'"></p>
+                        <p class="text-xs text-gray-400 mt-1" x-text="formatLogTime(log.created_at) + ' ' + formatLogDate(log.created_at)"></p>
+                    </div>
+                </div>
+            </template>
+            <p x-show="activityLogs.length === 0" class="text-center text-sm text-gray-500 mt-6">No recent activity.</p>
+        </div>
+        
+        <div class="p-4 border-t flex justify-center flex-shrink-0">
+            <a @click="view = 'audit-log'; showNotificationsSidebar = false" href="#" class="text-sm font-medium text-sky-600 hover:text-sky-800">View Full Audit Log</a>
+        </div>
+    </div>
+    
+    <div x-show="aiChatWindowOpen" 
+         @click.outside="aiChatWindowOpen = false" 
+         x-transition:enter="transition ease-in-out duration-300"
+         x-transition:enter-start="translate-x-full"
+         x-transition:enter-end="translate-x-0"
+         x-transition:leave="transition ease-in-out duration-300"
+         x-transition:leave-start="translate-x-0"
+         x-transition:leave-end="translate-x-full"
+         class="fixed inset-y-0 right-0 w-80 bg-white shadow-2xl z-40 flex flex-col"
+         id="ai-chatbot-sidebar" role="dialog" aria-modal="true" aria-labelledby="ai-chatbot-title">
+        
+        <div class="p-4 flex items-center justify-between border-b bg-sky-600 text-white flex-shrink-0">
+            <h2 id="ai-chatbot-title" class="text-lg font-bold flex items-center">
+                <i data-lucide="bot" class="w-5 h-5 mr-2"></i>
+                VANGUARD Assistant
+            </h2>
+            <button @click="aiChatWindowOpen = false" class="p-1 rounded-full text-white hover:bg-sky-700">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+        </div>
+        
+        <div x-ref="chatOutput" class="flex-1 overflow-y-auto p-3 space-y-3">
+            <template x-for="message in chatHistory.filter(m => m.role === 'user' || (m.role === 'assistant' && m.content))" :key="message.id">
+        <div :class="{'flex justify-end': message.role === 'user', 'flex justify-start': message.role === 'assistant'}">
+            <div class="max-w-[80%] p-3 rounded-xl text-sm shadow-md"
+                 :class="{'bg-sky-600 text-white': message.role === 'user', 'bg-gray-100 text-gray-800': message.role === 'assistant'}"
+                 x-init="lucide.createIcons()">
+                <div x-html="message.content"></div>
+                <div x-text="getChatTime(message.timestamp)" class="text-[10px] text-right mt-1" :class="message.role === 'user' ? 'text-sky-200' : 'text-gray-500'"></div>
+            </div>
+        </div>
+    </template>
+            
+            <div x-show="isAITyping" class="flex justify-start">
+                <div class="max-w-[80%] p-3 rounded-xl text-sm shadow-md bg-gray-100 text-gray-800">
+                    <div class="flex items-center space-x-2">
+                        <div class="w-2 h-2 rounded-full bg-gray-500 animate-pulse"></div>
+                        <div class="w-2 h-2 rounded-full bg-gray-500 animate-pulse delay-75"></div>
+                        <div class="w-2 h-2 rounded-full bg-gray-500 animate-pulse delay-150"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <form @submit.prevent="sendAIChatMessage" class="p-3 border-t flex flex-shrink-0">
+            <input x-model="chatInput" 
+                   type="text" 
+              x-model="chatInput" 
+    @keydown.enter="sendAIChatMessage" 
+    x-ref="chatInputRef"  placeholder="Ask VANGUARD about supervisors, agents, or POS devices..." 
+    class="flex-1 rounded-lg border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500"
+                   aria-label="AI Chat Input">
+            <button type="submit" 
+                    :disabled="!chatInput.trim() || isAITyping"
+                    class="bg-sky-600 hover:bg-sky-700 text-white font-semibold py-2 px-4 rounded-r-lg disabled:bg-sky-400 disabled:cursor-not-allowed">
+                <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+        </form>
+    </div>
+
+    <div x-show="showModal" 
+         x-transition:enter="ease-out duration-300"
+         x-transition:enter-start="opacity-0"
+         x-transition:enter-end="opacity-100"
+         x-transition:leave="ease-in duration-200"
+         x-transition:leave-start="opacity-100"
+         x-transition:leave-end="opacity-0"
+         class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+        <div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            
+           <div x-show="showModal" class="fixed inset-0 z-50 overflow-y-auto">
+    <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+        <div x-show="showModal" class="fixed inset-0 transition-opacity" aria-hidden="true">
+            <div class="absolute inset-0 bg-gray-500 opacity-75"></div>
+        </div>
+
+        <span class="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
+        <div x-show="showModal" @click.outside="closeModal()" 
+             class="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full" 
+             role="dialog" aria-modal="true" aria-labelledby="modal-headline">
+            
+            <div class="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
+                <div class="sm:flex sm:items-start">
+                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
+                        <h3 class="text-lg leading-6 font-medium text-gray-900" x-text="modalTitle" id="modal-headline"></h3>
+                        
+                        <template x-if="modalView.includes('supervisor')">
+                            <form @submit.prevent="saveSupervisor()" class="mt-2 space-y-4">
+                                <div>
+                                    <label for="sup-id" class="block text-sm font-medium text-gray-700">Supervisor ID</label>
+                                    <input type="text" x-model="form.supervisor_id" id="sup-id" name="supervisor_id" :disabled="modalView === 'edit-supervisor'" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100">
+                                </div>
+                                <div>
+                                    <label for="sup-name" class="block text-sm font-medium text-gray-700">Name</label>
+                                    <input type="text" x-model="form.name" id="sup-name" name="name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                </div>
+                                <div>
+                                    <label for="sup-region" class="block text-sm font-medium text-gray-700">Region</label>
+                                    <input type="text" x-model="form.region" id="sup-region" name="region" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                </div>
+                                <div>
+                                    <label for="sup-contact" class="block text-sm font-medium text-gray-700">Contact</label>
+                                    <input type="text" x-model="form.contact" id="sup-contact" name="contact" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                </div>
+                                
+                                <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                                    <button type="submit" class="inline-flex w-full justify-center rounded-md bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 sm:ml-3 sm:w-auto" x-text="modalView === 'add-supervisor' ? 'Add Supervisor' : 'Save Changes'"></button>
+                                    <button @click="showModal = false" type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+                                </div>
+                            </form>
+                        </template>
+                        
+                        <template x-if="modalView.includes('agent') && !modalView.includes('delete')">
+                            <form @submit.prevent="saveAgent()" class="mt-2 space-y-4">
+                                <div>
+                                    <label for="agent-id" class="block text-sm font-medium text-gray-700">Agent ID</label>
+                                    <input type="text" x-model="form.agent_id" id="agent-id" name="agent_id" :disabled="modalView === 'edit-agent'" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100">
+                                </div>
+                                <div>
+                                    <label for="agent-name" class="block text-sm font-medium text-gray-700">Name</label>
+                                    <input type="text" x-model="form.name" id="agent-name" name="name" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                </div>
+                                <div>
+                                    <label for="agent-loc" class="block text-sm font-medium text-gray-700">Location</label>
+                                    <input type="text" x-model="form.location" id="agent-loc" name="location" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                </div>
+                                <div>
+                                    <label for="agent-sup" class="block text-sm font-medium text-gray-700">Supervisor</label>
+                                    <select x-model="form.supervisor_id" id="agent-sup" name="supervisor_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                                        <option value="">Select Supervisor</option>
+                                        <template x-for="sup in supervisors" :key="sup.supervisor_id">
+                                            <option :value="sup.supervisor_id" x-text="sup.name"></option>
+                                        </template>
+                                    </select>
+                                </div>
+
+                                <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                                    <button type="submit" class="inline-flex w-full justify-center rounded-md bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 sm:ml-3 sm:w-auto" x-text="modalView === 'add-agent' ? 'Add Agent' : 'Save Changes'"></button>
+                                    <button @click="showModal = false" type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+                                </div>
+                            </form>
+                        </template>
+                        
+                        <template x-if="modalView.includes('pos') && !modalView.includes('delete')">
+    <form @submit.prevent="savePOS()" class="mt-2 space-y-4">
+        <div>
+            <label for="pos-serial" class="block text-sm font-medium text-gray-700">Serial Number</label>
+            <input type="text" x-model="form.serial_number" id="pos-serial" name="serial_number" :disabled="modalView === 'edit-pos'" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm disabled:bg-gray-100">
+        </div>
+        
+        <div>
+            <label for="pos-status" class="block text-sm font-medium text-gray-700">Status</label>
+            <select x-model="form.status" id="pos-status" name="status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="Available">Available</option>
+                <option value="Deployed">Deployed</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Faulty">Faulty</option>
+            </select>
+        </div>
+        
+        <div>
+            <label for="pos-condition" class="block text-sm font-medium text-gray-700">Condition</label>
+            <select x-model="form.condition" id="pos-condition" name="condition" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="Good">Good</option>
+                <option value="Fair">Fair</option>
+                <option value="Poor">Poor</option>
+            </select>
+        </div>
+        
+        <div>
+            <label for="pos-notes" class="block text-sm font-medium text-gray-700">Notes</label>
+            <textarea x-model="form.notes" id="pos-notes" name="notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></textarea>
+        </div>
+        
+        <div>
+            <label for="pos-agent" class="block text-sm font-medium text-gray-700">Assigned Agent</label>
+            <select x-model="form.agent_id" id="pos-agent" name="agent_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option :value="null">Unassigned</option>
+                <template x-for="agent in agents" :key="agent.agent_id">
+                    <option :value="agent.agent_id" x-text="agent.name"></option>
+                </template>
+            </select>
+        </div>
+        
+        <div x-show="modalView === 'edit-pos'">
+            <label for="pos-issued" class="block text-sm font-medium text-gray-700">Date Issued</label>
+            <input type="date" x-model="form.date_issued" id="pos-issued" name="date_issued" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+        </div>
+        
+        <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+            <button type="submit" class="inline-flex w-full justify-center rounded-md bg-sky-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-sky-500 sm:ml-3 sm:w-auto" x-text="modalView === 'add-pos' ? 'Add POS Device' : 'Save Changes'"></button>
+            <button @click="showModal = false" type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+        </div>
+    </form>
+</template>
+
+<template x-if="modalView === 'update-maintenance'">
+    <form @submit.prevent="updateMaintenanceStatus()" class="mt-2 space-y-4">
+        <p class="text-sm text-gray-500">Updating status for POS: <span class="font-bold" x-text="form.serial_number"></span></p>
+        <div>
+            <label for="maintenance-status" class="block text-sm font-medium text-gray-700">New Status</label>
+            <select x-model="form.status" id="maintenance-status" name="status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm">
+                <option value="Available">Available</option>
+                <option value="Deployed">Deployed</option>
+                <option value="Maintenance">Maintenance</option>
+                <option value="Faulty">Faulty</option>
+            </select>
+        </div>
+
+        <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+            <button type="submit" class="inline-flex w-full justify-center rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 sm:ml-3 sm:w-auto">Update Status</button>
+            <button @click="showModal = false" type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+        </div>
+    </form>
+</template>
+
+<div x-show="view === 'settings'">
+    <div class="max-w-xl mx-auto bg-white p-6 rounded-lg shadow">
+        <h2 class="text-xl font-semibold mb-4">Admin Settings</h2>
+        <form @submit.prevent="saveSettings()">
+            <div>
+                <label for="admin_name" class="block text-sm font-medium text-gray-700">Admin Name</label>
+                <input type="text" x-model="settings.admin_name" id="admin_name" name="admin_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm">
+            </div>
+            <div class="mt-4">
+                <label for="admin_email" class="block text-sm font-medium text-gray-700">Admin Email</label>
+                <input type="email" x-model="settings.email" id="admin_email" name="email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-sky-500 focus:ring-sky-500 sm:text-sm">
+            </div>
+            <div class="mt-6">
+                <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-sky-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2">
+                    Save Settings
                 </button>
             </div>
-            
-            <div class="h-96 relative">
-                <canvas id="agentsChart" aria-label="Agents per supervisor chart"></canvas>
+        </form>
+        <div class="mt-8 pt-4 border-t border-gray-200">
+            </div>
+    </div>
+</div>
+                        <template x-if="modalView.includes('supervisor') && modalView.includes('delete') === false && modalView.includes('update-maintenance') === false">
+                            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                        
+                          
+                            </div>
+                        </template>
+                        
+                        <template x-if="modalView.includes('agent') && modalView.includes('delete') === false && modalView.includes('update-maintenance') === false">
+                            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+
+                        </template>
+
+                        <template x-if="modalView.includes('pos') && modalView.includes('delete') === false && modalView.includes('update-maintenance') === false">
+                            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                          
+                            </div>
+                        </template>
+                        
+                        <template x-if="modalView.includes('delete')">
+                            <div class="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                                <button @click="deleteItem()" type="button" class="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto">Delete</button>
+                                <button @click="showModal = false" type="button" class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:mt-0 sm:w-auto">Cancel</button>
+                            </div>
+                        </template>
+
+                    </div>
+                </div>
             </div>
         </div>
-    </section>
-
-    <section x-show="view==='agents'" x-cloak>
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">Agents</h2>
-        <div class="flex gap-2">
-          <button class="bg-green-600 text-white px-3 py-2 rounded" @click="openModal('addAgent')">➕ Add</button>
-          <button class="bg-white px-3 py-2 rounded border" @click="exportPDF('agents')"><i data-lucide="file-down" class="w-4 h-4 inline"></i> PDF</button>
-          <button class="bg-white px-3 py-2 rounded border" @click="exportCSVServer('agents')"><i data-lucide="download" class="w-4 h-4 inline"></i> CSV</button>
-        </div>
-      </div>
-
-      <div class="mb-2 flex items-center gap-2">
-        <input id="filterAgents" name="filterAgents" placeholder="Filter or search..." x-model="filterText" @input="fetchAgents()" class="p-2 border rounded w-1/3" />
-        <div class="ml-auto text-sm opacity-70">Showing <span x-text="agentsCountDisplay"></span></div>
-      </div>
-
-      <div class="bg-white rounded shadow overflow-auto">
-        <table class="min-w-full text-sm" role="table" aria-label="Agents table">
-          <thead class="bg-slate-100">
-            <tr>
-              <th class="p-2 text-left cursor-sort" @click="changeSort('name', 'agents')">Name <i data-lucide="chevrons-up-down" class="w-4 h-4 inline"></i></th>
-              <th class="p-2 text-left cursor-sort" @click="changeSort('contact','agents')">Contact <i data-lucide="chevrons-up-down" class="w-4 h-4 inline"></i></th>
-              <th class="p-2 text-left">Supervisor</th>
-              <th class="p-2 text-left">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            <template x-for="a in agents" :key="a.agent_id">
-              <tr class="border-b hover:bg-slate-50">
-                <td class="p-2" x-text="a.name"></td>
-                <td class="p-2" x-text="a.contact"></td>
-                <td class="p-2" x-text="a.supervisor_name || '—'"></td>
-                <td class="p-2">
-                  <button @click="openModal('editAgent', a)" class="p-2 rounded hover:bg-slate-100" title="Edit agent"><i data-lucide="edit" class="w-4 h-4"></i></button>
-                  <button @click="confirmDeleteAgent(a.agent_id)" class="p-2 rounded hover:bg-slate-100 text-red-500" title="Delete agent"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="flex items-center justify-between mt-3">
-        <div>
-          <button class="px-3 py-1 border rounded mr-2" :disabled="agtPage===1" @click="changePage('prev','agents')">⬅ Prev</button>
-          <button class="px-3 py-1 border rounded" :disabled="(agtPage * agtPageSize) >= agentsTotal" @click="changePage('next','agents')">Next ➡</button>
-        </div>
-        <div class="text-sm opacity-80">Page <span x-text="agtPage"></span> • Page size
-          <select x-model.number="agtPageSize" @change="fetchAgents()" class="ml-2 border rounded p-1" aria-label="Agents page size">
-            <option :value="10">10</option><option :value="25">25</option><option :value="50">50</option>
-          </select>
-        </div>
-      </div>
-    </section>
-<section x-show="view==='supervisors'" x-cloak>
-  <div class="flex justify-between items-center mb-4">
-    <h2 class="text-2xl font-bold">Supervisors</h2>
-    <div class="flex gap-2">
-      <button class="bg-green-600 text-white px-3 py-2 rounded" @click="openModal('addSupervisor')">➕ Add Supervisor</button>
-      <button class="bg-white px-3 py-2 rounded border" @click="exportPDF('supervisors')">PDF</button>
-      <button class="bg-white px-3 py-2 rounded border" @click="exportCSVServer('supervisors')">CSV</button>
     </div>
   </div>
-
-  <div class="mb-2 flex items-center gap-2">
-    <input id="filterSupervisors" name="filterSupervisors" placeholder="Filter or search..." x-model="filterText" @input="fetchSupervisors()" class="p-2 border rounded w-1/3" />
-    <div class="ml-auto text-sm opacity-70">Showing <span x-text="supervisorsCountDisplay"></span></div>
-  </div>
-
-  <div class="bg-white rounded shadow overflow-auto">
-    <table class="min-w-full text-sm" role="table" aria-label="Supervisors table">
-      <thead class="bg-slate-100">
-        <tr>
-          <th class="p-2 text-left cursor-sort" @click="changeSort('name','supervisors')">Name <i data-lucide="chevrons-up-down" class="w-4 h-4 inline"></i></th>
-          <th class="p-2 text-left cursor-sort" @click="changeSort('region','supervisors')">Region <i data-lucide="chevrons-up-down" class="w-4 h-4 inline"></i></th>
-          <th class="p-2 text-left">Agents</th>
-          <th class="p-2 text-left">POS Assigned</th>
-          <th class="p-2 text-left">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        <template x-for="s in supervisors" :key="s.supervisor_id">
-          <tr class="border-b hover:bg-slate-50">
-            <td class="p-2" x-text="s.name"></td>
-            <td class="p-2" x-text="s.region"></td>
-            <td class="p-2" x-text="s.agent_count || 0"></td>
-            <td class="p-2" x-text="s.pos_assigned || 0"></td>
-            <td class="p-2">
-              <button @click="openModal('editSupervisor', s)" class="p-2 rounded hover:bg-slate-100" title="Edit"><i data-lucide="edit" class="w-4 h-4"></i></button>
-              <button @click="confirmDeleteSupervisor(s.supervisor_id)" class="p-2 rounded hover:bg-slate-100 text-red-500" title="Delete"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-            </td>
-          </tr>
-        </template>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="flex items-center justify-between mt-3">
-    <div>
-      <button class="px-3 py-1 border rounded mr-2" :disabled="supPage===1" @click="changePage('prev','supervisors')">⬅ Prev</button>
-      <button class="px-3 py-1 border rounded" :disabled="(supPage*supPageSize) >= supervisorsTotal" @click="changePage('next','supervisors')">Next ➡</button>
-    </div>
-    <div class="text-sm opacity-80">Page <span x-text="supPage"></span> • Page size
-      <select x-model.number="supPageSize" @change="fetchSupervisors()" class="ml-2 border rounded p-1">
-        <option :value="10">10</option>
-        <option :value="25">25</option>
-        <option :value="50">50</option>
-      </select>
-    </div>
-  </div>
-</section>
-
-    <section x-show="view==='pos'" x-cloak>
-      <div class="flex justify-between items-center mb-4">
-        <h2 class="text-2xl font-bold">POS Devices</h2>
-        <button class="bg-green-600 text-white px-3 py-2 rounded" @click="openModal('addPOS')">➕ Add POS</button>
-      </div>
-
-      <div class="bg-white rounded shadow overflow-auto">
-        <table class="min-w-full text-sm" role="table" aria-label="POS devices table">
-          <thead class="bg-slate-100">
-            <tr><th class="p-2">Serial</th><th class="p-2">Agent</th><th class="p-2">Status</th><th class="p-2">Condition</th><th class="p-2">Actions</th></tr>
-          </thead>
-          <tbody>
-            <template x-for="p in pos_devices" :key="p.pos_id">
-              <tr class="border-b hover:bg-slate-50">
-                <td class="p-2" x-text="p.serial_number"></td>
-                <td class="p-2" x-text="p.agent_name || '—'"></td>
-                <td class="p-2" x-text="p.status"></td>
-                <td class="p-2" x-text="p.condition"></td>
-                <td class="p-2">
-                  <button @click="openModal('editPOS', p)" class="p-2 rounded hover:bg-slate-100" title="Edit POS"><i data-lucide="edit" class="w-4 h-4"></i></button>
-                  <button @click="confirmDeletePOS(p.pos_id)" class="p-2 rounded hover:bg-slate-100 text-red-500" title="Delete POS"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
-                </td>
-              </tr>
-            </template>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <section x-show="view==='logs'" x-cloak>
-      <h2 class="text-2xl font-bold mb-4">Activity Logs</h2>
-      <div class="mb-3 flex gap-2">
-        <input id="logsFilter" name="logsFilter" x-model="logsFilter" @input="applyLogsFilter()" placeholder="Filter logs..." class="p-2 border rounded w-1/3" />
-        <button class="bg-white px-3 py-2 rounded border" @click="exportLogsCSV()">📤 Export Logs CSV</button>
-        <button class="bg-white px-3 py-2 rounded border" @click="exportPDF('activity_logs')">🧾 Export Logs PDF</button>
-      </div>
-      <div class="bg-white rounded shadow p-4 h-96 overflow-auto">
-        <template x-for="l in filteredActivityLogs" :key="l.id">
-          <div class="mb-3">
-            <div class="text-sm font-medium" x-text="(l.user_name || 'ICT') + ' • ' + (new Date(l.created_at)).toLocaleString()"></div>
-            <div class="text-xs opacity-70" x-text="l.action + (l.details ? (' — ' + l.details) : '')"></div>
-          </div>
-        </template>
-      </div>
-    </section>
-
-    <section x-show="view==='settings'" x-cloak>
-      <h2 class="text-2xl font-bold mb-4">Settings</h2>
-      <div class="bg-white rounded shadow p-4 max-w-xl">
-        <div class="mb-3">
-          <label for="adminName" class="block text-sm mb-1">Admin Name</label>
-          <input id="adminName" name="adminName" x-model="settings.admin_name" class="w-full p-2 border rounded" autocomplete="name" />
-        </div>
-        <div class="mb-3">
-          <label for="adminEmail" class="block text-sm mb-1">Email</label>
-          <input id="adminEmail" name="adminEmail" x-model="settings.email" class="w-full p-2 border rounded" autocomplete="email" />
-        </div>
-        <div class="flex gap-2">
-          <button @click="saveSettings()" class="bg-sky-700 text-white px-3 py-2 rounded">Save Settings</button>
-          <button @click="exportBackupJSON()" class="bg-white px-3 py-2 rounded border">📥 Download Backup</button>
-        </div>
-      </div>
-    </section>
-  </main>
-</div>
-
-<div x-show="modalOpen" x-cloak class="fixed inset-0 z-50 flex">
-  <div @click="closeModal()" class="absolute inset-0 bg-black/40"></div>
-  <div class="ml-auto w-full max-w-xl bg-white h-full shadow-lg p-6 overflow-auto slide-in" :class="modalOpen? 'show':''" role="dialog" aria-modal="true">
-    <div class="flex items-start justify-between">
-      <div>
-        <h3 class="text-xl font-semibold" x-text="modalTitle"></h3>
-        <p class="text-sm opacity-70" x-text="modalSubtitle"></p>
-      </div>
-      <div class="flex gap-2">
-        <button class="px-3 py-1 rounded border" @click="prevModalStep()" x-show="modalStep>1">← Back</button>
-        <button class="px-3 py-1 rounded border" @click="closeModal()">Close</button>
-      </div>
-    </div>
-
-    <div class="mt-4">
-      <div x-show="modalType==='addSupervisor' || modalType==='editSupervisor'">
-        <div x-show="modalStep===1" class="fade-scale" :class="modalStep===1? 'show':''">
-          <label class="block mb-2" for="supName">Name
-            <input id="supName" name="supName" class="w-full p-2 border rounded" x-model="form.name" autocomplete="name" />
-          </label>
-          <label class="block mb-2" for="supRegion">Region
-            <input id="supRegion" name="supRegion" class="w-full p-2 border rounded" x-model="form.region" />
-          </label>
-          <div class="flex justify-end"><button class="bg-sky-700 text-white px-4 py-2 rounded" @click="nextModalStep()">Next</button></div>
-        </div>
-        <div x-show="modalStep===2" class="fade-scale" :class="modalStep===2? 'show':''">
-          <h4 class="font-semibold">Confirm</h4>
-          <div class="mb-3">
-            <div><strong>Name:</strong> <span x-text="form.name"></span></div>
-            <div><strong>Region:</strong> <span x-text="form.region"></span></div>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button class="px-3 py-2 rounded border" @click="prevModalStep()">Back</button>
-            <button class="bg-green-600 text-white px-3 py-2 rounded" @click="modalType==='addSupervisor'? addSupervisorConfirm() : updateSupervisorConfirm()">Confirm</button>
-          </div>
-        </div>
-      </div>
-
-      <div x-show="modalType==='addAgent' || modalType==='editAgent'">
-        <div x-show="modalStep===1" class="fade-scale" :class="modalStep===1? 'show':''">
-          <label class="block mb-2" for="agtName">Name
-            <input id="agtName" name="agtName" class="w-full p-2 border rounded" x-model="form.name" autocomplete="name" />
-          </label>
-          <label class="block mb-2" for="agtContact">Contact
-            <input id="agtContact" name="agtContact" class="w-full p-2 border rounded" x-model="form.contact" autocomplete="tel" />
-          </label>
-          <label class="block mb-2" for="agtLocation">Location
-            <input id="agtLocation" name="agtLocation" class="w-full p-2 border rounded" x-model="form.location" />
-          </label>
-          <label class="block mb-2" for="agtSupervisor">Supervisor
-            <select id="agtSupervisor" name="agtSupervisor" class="w-full p-2 border rounded" x-model="form.supervisor_id">
-              <option value="">Select</option>
-              <template x-for="s in supSelect" :key="s.supervisor_id"><option :value="s.supervisor_id" x-text="s.name"></option></template>
-            </select>
-          </label>
-          <div class="flex justify-end"><button class="bg-sky-700 text-white px-4 py-2 rounded" @click="nextModalStep()">Next</button></div>
-        </div>
-        <div x-show="modalStep===2" class="fade-scale" :class="modalStep===2? 'show':''">
-          <h4 class="font-semibold">Confirm Agent</h4>
-          <div class="mb-3">
-            <div><strong>Name:</strong> <span x-text="form.name"></span></div>
-            <div><strong>Supervisor:</strong> <span x-text="(supSelect.find(s=>s.supervisor_id===form.supervisor_id)||{name:''}).name"></span></div>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button class="px-3 py-2 rounded border" @click="prevModalStep()">Back</button>
-            <button class="bg-green-600 text-white px-3 py-2 rounded" @click="modalType==='addAgent'? addAgentConfirm() : updateAgentConfirm()">Confirm</button>
-          </div>
-        </div>
-      </div>
-
-      <div x-show="modalType==='addPOS' || modalType==='editPOS'">
-        <div x-show="modalStep===1" class="fade-scale" :class="modalStep===1? 'show':''">
-          <label class="block mb-2" for="posSerial">Serial Number
-            <input id="posSerial" name="posSerial" class="w-full p-2 border rounded" x-model="form.serial_number" />
-          </label>
-          <label class="block mb-2" for="posAgent">Assign to Agent
-            <select id="posAgent" name="posAgent" class="w-full p-2 border rounded" x-model="form.agent_id">
-              <option value="">Unassigned</option>
-              <template x-for="a in all_agents" :key="a.agent_id"><option :value="a.agent_id" x-text="a.name"></option></template>
-            </select>
-          </label>
-          <label class="block mb-2" for="posStatus">Status
-            <select id="posStatus" name="posStatus" class="w-full p-2 border rounded" x-model="form.status"><option>Available</option><option>Active</option><option>Returned</option><option>Inactive</option></select>
-          </label>
-          <label class="block mb-2" for="posCondition">Condition
-            <select id="posCondition" name="posCondition" class="w-full p-2 border rounded" x-model="form.condition"><option>Excellent</option><option>Good</option><option>Needs Repair</option><option>Damaged</option></select>
-          </label>
-          <div class="flex justify-end"><button class="bg-sky-700 text-white px-4 py-2 rounded" @click="nextModalStep()">Next</button></div>
-        </div>
-        <div x-show="modalStep===2" class="fade-scale" :class="modalStep===2? 'show':''">
-          <h4 class="font-semibold">Confirm POS</h4>
-          <div class="mb-3">
-            <div><strong>Serial:</strong> <span x-text="form.serial_number"></span></div>
-            <div><strong>Agent:</strong> <span x-text="(all_agents.find(x=>x.agent_id===form.agent_id)||{name:'Unassigned'}).name"></span></div>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button class="px-3 py-2 rounded border" @click="prevModalStep()">Back</button>
-            <button class="bg-green-600 text-white px-3 py-2 rounded" @click="modalType==='addPOS'? addPOSConfirm() : updatePOSConfirm()">Confirm</button>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-</div>
-
-<div x-data="{ toasts: [] }" x-init="$watch('toasts', () => { toasts.forEach(t => setTimeout(()=> toasts.splice(toasts.indexOf(t),1), 4200)) })" class="fixed top-4 right-4 z-50 pointer-events-none">
-  <template x-for="(t,i) in toasts" :key="i">
-    <div class="bg-white border rounded shadow px-4 py-2 mb-2 pointer-events-auto flex items-center gap-3">
-      <div class="text-2xl" x-text="t.emoji"></div>
-      <div>
-        <div class="font-medium" x-text="t.title"></div>
-        <div class="text-sm opacity-70" x-text="t.message"></div>
-      </div>
-    </div>
-  </template>
-</div>
-
-
-<button id="openAIButton" class="fixed bottom-4 right-4 z-40 bg-sky-600 hover:bg-sky-700 text-white p-3 rounded-full shadow-lg" title="Open AI Assistant">
-  <i data-lucide="bot" class="w-6 h-6"></i>
-</button>
-
-<div id="aiChatWindow" class="fixed bottom-16 right-4 z-40 w-80 h-96 bg-white rounded-lg shadow-2xl flex flex-col hidden overflow-hidden" style="display:none;">
-  <div class="bg-sky-700 text-white p-3 flex justify-between items-center">
-    <h4 class="font-semibold">AI Assistant</h4>
-    <button id="closeAIButton" class="p-1 rounded hover:bg-sky-600">
-      <i data-lucide="x" class="w-4 h-4"></i>
-    </button>
-  </div>
-  <div id="chatOutput" class="flex-1 p-3 overflow-y-auto flex flex-col gap-2">
-    <div class="text-sm text-gray-500 text-center p-2 border-b"><br>I'm Still Under Development.</br></div>
-  </div>
-  <div class="p-3 border-t flex gap-2">
-    <input id="chatInput" type="text" placeholder="Ask a question..." class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-sky-500" />
-    <button id="sendBtn" class="bg-sky-700 text-white px-3 py-2 rounded hover:bg-sky-800">
-      <i data-lucide="send" class="w-4 h-4"></i>
-    </button>
-  </div>
-</div>
-<script src="main.js"></script>
 
 </body>
 </html>

@@ -1,852 +1,1144 @@
-// main.js - Consolidated Application Logic
+// --- Supabase and Global Configuration ---
+// NOTE: For the app to work, you must define window.SUPABASE_URL and 
+// window.SUPABASE_ANON_KEY in your HTML *before* loading this script.
+const SUPABASE_URL = window.SUPABASE_URL;
+const SUPABASE_ANON_KEY = window.SUPABASE_ANON_KEY;
 
-// 1. Greeting and Time Update Function
-function updateGreetingAndTime() {
-    const now = new Date();
-    const hours = now.getHours();
-    const minutes = now.getMinutes().toString().padStart(2, '0');
-    const seconds = now.getSeconds().toString().padStart(2, '0');
+// Initializing the Supabase Client.
+const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    // Determine greeting
-    let greeting = '';
-    if (hours < 12) {
-        greeting = 'Good Morning🌅';
-    } else if (hours < 18) {
-        greeting = 'Good Afternoon🌞';
+// [AI INTEGRATION CONFIGURATION MOVED]
+// The AI configuration constants were moved inside the app() function 
+// to fix the "Cannot access 'SYSTEM_PROMPT' before initialization" error.
+
+// --- Helper Functions ---
+
+/**
+ * Records an activity to the 'activity_logs' table.
+ */
+async function recordActivity(action, details, userId, userRole) { 
+    if (!userId) {
+        console.warn('Cannot record activity: User ID is required.');
+        return;
+    }
+
+    // Using the correct client name 'supabaseClient'
+    const { error } = await supabaseClient 
+        .from('activity_logs')
+        .insert([{
+            user_id: userId,
+            action: action,
+            details: {
+                ...details,
+                user_role: userRole || 'unknown'
+            }
+        }]);
+
+    if (error) {
+        console.error('Error recording activity:', error.message);
     } else {
-        greeting = 'Good Evening🌜';
+        console.log(`Activity logged: ${action}`);
     }
-
-    // Display greeting and time
-    const elGreeting = document.getElementById('greeting');
-    const elTime = document.getElementById('time');
-    // Added safety check for elements
-    if (elGreeting) elGreeting.textContent = `${greeting}, Admin!`;
-    if (elTime) elTime.textContent = `Current Time: ${hours}:${minutes}:${seconds}`;
 }
 
-// 2. Alpine App Function (with Chart fix and Report integration)
-function app(){
-  return {
-    agentsPerSupervisor: [],
-    view: 'dashboard',
-    supabase: window.supabase,
-    settings: { admin_name: 'ICT Officer', email: 'admin@pos.com' }, // Default settings
-    /* counts */
-    counts: { supervisors:0, agents:0, pos:0, requests_pending:0 },
-    /* search & filters */
-    globalSearch: '', filterText: '', logsFilter: '',
-    /* pagination & sorting (supervisors) */
-    supPage: 1, supPageSize: 10, supSortColumn: 'name', supSortDir: 'asc', supervisorsTotal: 0,
-    /* pagination & sorting (agents) */
-    agtPage: 1, agtPageSize: 10, agtSortColumn: 'name', agtSortDir: 'asc', agentsTotal: 0,
-    /* data */
-    supervisors: [], agents: [], all_agents: [], pos_devices: [], pos_requests: [], activity_logs: [],
-    /* modal */
-    modalOpen: false, modalType: '', modalStep: 1, form: {}, modalTitle: '', modalSubtitle: '',
-    supSelect: [],
-    /* charts */
-    chartAgents: null,
-    chartType: localStorage.getItem('bst_chartType') || 'bar',
-    _isToggling: false,
-    
-    selectedSupervisorId: '', // For the Report view
-
-    get selectedSupervisorAgents() {
-      const group = this.agentsPerSupervisor.find(
-        g => g.supervisor_id == this.selectedSupervisorId
-      );
-      // Ensure agents property exists and is an array before returning
-      return group && Array.isArray(group.agents) ? group.agents : [];
-    },
-
-    // -----------------------------------------------------------------
-    // --- CONSOLIDATED & FIXED REPORT EXPORT LOGIC ---
-    // -----------------------------------------------------------------
-
-    /**
-     * Exports all data from a Supabase table to a PDF file.
-     */
-    async exportPDF(table){
-      try {
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        // Fetch all data for the table from Supabase
-        const { data, error } = await this.supabase.from(table).select('*');
-        
-        if(error){ alert(error.message); return; }
-        if(!data || !data.length){ 
-          Alpine.store('toasts').pushSimple('No Data','⚠️', 'No data found to export.'); 
-          return; 
-        }
-
-        const headers = Object.keys(data[0]);
-        const body = data.map(r => Object.values(r));
-        
-        // Add title and table to PDF
-        doc.text(`Report: ${table}`, 14, 18);
-        (doc).autoTable({ 
-            startY: 24, 
-            head: [headers], 
-            body: body,
-            // Add minimal styling
-            styles: { fontSize: 8, cellPadding: 2 },
-            headStyles: { fillColor: [56, 189, 248] }
-        });
-
-        // Save and download file
-        doc.save(`${table}_report_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.pdf`);
-        Alpine.store('toasts').pushSimple('PDF generated','🧾','');
-      } catch(e){ 
-        console.error(e); 
-        Alpine.store('toasts').pushSimple('PDF export failed','❌', e.message || 'Unknown error');
-      }
-    },
-    /**
-     * Exports all data from a Supabase table to a CSV file.
-     */
-    async exportCSVServer(table){
-      try {
-        const { data, error } = await this.supabase.from(table).select('*');
-        if(error){ alert(error.message); return; }
-        if(!data || !data.length){ 
-          Alpine.store('toasts').pushSimple('No Data','⚠️', 'No data found to export.'); 
-          return; 
-        }
-        
-        const headers = Object.keys(data[0]);
-        // Map data to CSV rows, ensuring values are quoted and inner quotes escaped
-        const rows = data.map(r => headers.map(h => `"${String(r[h]||'').replace(/"/g,'""')}"`).join(','));
-        const csv = [headers.join(','), ...rows].join('\n');
-        
-        // Create and download file
-        const blob = new Blob([csv], { type:'text/csv' }); 
-        const url = URL.createObjectURL(blob); 
-        const a=document.createElement('a'); 
-        a.href=url; 
-        a.download=`${table}_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`; 
-        document.body.appendChild(a); 
-        a.click(); 
-        a.remove(); 
-        URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple('CSV exported','📤','');
-      } catch(e){ 
-        console.error(e); 
-        Alpine.store('toasts').pushSimple('CSV export failed','❌', e.message || 'Unknown error'); 
-      }
-    },
-
-    /**
-     * Exports the locally loaded activity logs array to a CSV file.
-     */
-    exportLogsCSV(){
-      try {
-        const logs = this.activity_logs || [];
-        if(!logs.length){ 
-          Alpine.store('toasts').pushSimple('No Logs','⚠️', 'No activity logs to export.'); 
-          return; 
-        }
-        
-        // FIX: Ensure multiline text (common in logs 'action' or 'details') is flat before quoting
-        const rows = logs.map(l => [ 
-          l.id, 
-          l.user_role, 
-          l.user_name, 
-          (l.action||'').replace(/[\r\n]+/g,' '), // Strips newlines
-          (l.details||'').replace(/[\r\n]+/g,' '), // Strips newlines
-          l.created_at 
-        ]);
-        
-        const headers = ['id','user_role','user_name','action','details','created_at'];
-        // Quote and escape inner quotes for CSV format
-        const csv = [ 
-          headers.join(','), 
-          ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')) 
-        ].join('\n');
-        
-        const blob = new Blob([csv], { type: 'text/csv' }); 
-        const url = URL.createObjectURL(blob); 
-        const a=document.createElement('a'); 
-        a.href = url; 
-        a.download = `activity_logs_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.csv`; 
-        document.body.appendChild(a); 
-        a.click(); 
-        a.remove(); 
-        URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple('Logs exported','📤','');
-      } catch(e){ 
-        console.error(e); 
-        Alpine.store('toasts').pushSimple('Logs CSV failed','❌', e.message || 'Unknown error'); 
-      }
-    },
-    
-    /* init: run after Alpine loads */
-    async initApp() {
-      try {
-        // load settings first
-        await this.loadSettings();
-        await Promise.all([
-          this.fetchSupervisors(),
-          this.fetchAgents(),
-          this.fetchPOS(),
-          this.fetchActivityLogs()
-        ]);
-      } catch (e) {
-        console.warn('data load error', e);
-      }
-
-      function renderIcons() {
-        if(window.lucide) lucide.createIcons();
-      }
-      // Re-render icons after initial data load
-      renderIcons();
-      // Also watch for Alpine updates that add new DOM elements
-      document.addEventListener('alpine:updated', renderIcons);
-
-      this.updateCounts();
-      this.setupRealtime();
-
-      // protect against chart errors
-      try {
-        this.$nextTick(() => this.initChart());
-      } catch (err) {
-        console.warn('chart init skipped:', err);
-      }
-      this.syncToastStore();
-      
-      // Initialize greeting & time
-      updateGreetingAndTime();
-      setInterval(updateGreetingAndTime, 1000);
-    },
-// ... inside the return { ... } block of your function app()
-
-// --- New Export Wrappers for Report View ---
+/**
+ * Formats a date string into 'YYYY-MM-DD'.
+ */
+function formatDate(dateString) {
+    if (!dateString) return null;
+    return new Date(dateString).toISOString().split('T')[0];
+}
 
 /**
- * Exports the locally selected agents (agentsPerSupervisor report) to PDF.
+ * Converts ISO date string to a human-readable time format (e.g., "10:30 AM").
  */
-exportAgentsPerSupervisorPDF() {
-    try {
-        const data = this.selectedSupervisorAgents || []; // Use the local array
-        if(!data.length){ 
-            Alpine.store('toasts').pushSimple('No Data','⚠️', 'No agents selected for export.'); 
-            return; 
-        }
-
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        const supervisor = this.agentsPerSupervisor.find(g => g.supervisor_id == this.selectedSupervisorId)?.supervisor || 'N/A';
-        const filename = `Agents_${supervisor}_Report.pdf`;
-
-        // 1. Format data for autoTable
-        const headers = ['Agent ID', 'Name', 'Contact', 'Location'];
-        const body = data.map(a => [ 
-            a.agent_id, 
-            a.name, 
-            a.contact, 
-            a.location 
-        ]);
-        
-        // 2. Add title and table to PDF
-        doc.text(`Agents Report for Supervisor: ${supervisor}`, 14, 18);
-        (doc).autoTable({ 
-            startY: 24, 
-            head: [headers], 
-            body: body,
-            styles: { fontSize: 8, cellPadding: 2 },
-            headStyles: { fillColor: [56, 189, 248] }
-        });
-
-        // 3. Save and download file
-        doc.save(filename);
-        Alpine.store('toasts').pushSimple('PDF Report Generated','🧾', filename);
-    } catch(e) {
-        console.error('PDF export error:', e); 
-        Alpine.store('toasts').pushSimple('PDF Export Failed','❌', e.message || 'Unknown error');
-    }
-},
+function formatLogTime(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+}
 
 /**
- * Exports the locally selected agents (agentsPerSupervisor report) to CSV.
+ * Converts ISO date string to a human-readable date format (e.g., "Oct 21, 2025").
  */
-exportAgentsPerSupervisorCSV(){
-    try {
-        const data = this.selectedSupervisorAgents || [];
-        if(!data.length){ 
-            Alpine.store('toasts').pushSimple('No Data','⚠️', 'No agents selected for export.'); 
-            return; 
-        }
+function formatLogDate(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
 
-        const supervisor = this.agentsPerSupervisor.find(g => g.supervisor_id == this.selectedSupervisorId)?.supervisor || 'N/A';
-        const filename = `Agents_${supervisor}_Report.csv`;
 
-        // 1. Define headers and map data objects to an array of values
-        const headers = ['agent_id','name','contact','location'];
-        const rows = data.map(a => [ 
-            a.agent_id, a.name, a.contact, a.location 
-        ]);
+// --- Toast/Notification Store for Alpine.js ---
+document.addEventListener('alpine:init', () => {
+    Alpine.store('toasts', {
+        items: [],
+        history: [],
 
-        // 2. Format as CSV string (similar to exportLogsCSV)
-        const csv = [ 
-            headers.join(','), 
-            // Quote and escape inner quotes
-            ...rows.map(r => r.map(c => `"${String(c||'').replace(/"/g,'""')}"`).join(',')) 
-        ].join('\n');
-
-        // 3. Create and download file
-        const blob = new Blob([csv], { type: 'text/csv' }); 
-        const url = URL.createObjectURL(blob); 
-        const a=document.createElement('a'); 
-        a.href = url; 
-        a.download = filename; 
-        document.body.appendChild(a); 
-        a.click(); 
-        a.remove(); 
-        URL.revokeObjectURL(url);
-        
-        Alpine.store('toasts').pushSimple('CSV Report Exported','📤', filename);
-    } catch(e){ 
-        console.error('CSV export error:', e);
-        Alpine.store('toasts').pushSimple('CSV Export Failed','❌', e.message || 'Unknown error'); 
-    }
-},
-
-// ... rest of your functions (e.g., initApp, fetchSupervisors, etc.)
-    /* Chart initialization and fix for 'fullSize' error */
-    initChart() {
-      const ctx = document.getElementById('agentsChart');
-      if (!ctx || !window.Chart) return;
-      
-      const chartData = this.supervisors.map(s => s.agent_count);
-      const chartLabels = this.supervisors.map(s => s.name);
-      const isBar = this.chartType === 'bar';
-
-      if (this.chartAgents) {
-        try { this.chartAgents.destroy(); } catch {}
-      }
-
-      this.chartAgents = new Chart(ctx, {
-        type: this.chartType,
-        data: {
-          labels: chartLabels,
-          datasets: [{
-            label: 'Agents',
-            data: chartData,
-            backgroundColor: isBar ? 'rgba(56, 189, 248, 0.8)' : chartLabels.map(() => `hsl(${Math.random() * 360}, 70%, 50%)`),
-            borderColor: isBar ? 'rgba(2, 132, 199, 1)' : '#fff',
-            borderWidth: isBar ? 1 : 2,
-          }]
+        add(toast) {
+            toast.id = Date.now();
+            toast.show = true;
+            this.items.unshift(toast);
+            this.history.unshift(toast);
+            setTimeout(() => this.remove(toast.id), 5000);
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          // **FIXED: Explicitly disable title/subtitle plugins to prevent layout error**
-          plugins: {
-            legend: { display: this.chartType === 'pie' ? true : 'top' },
-            tooltip: { cornerRadius: 8 },
-            title: { display: false },
-            subtitle: { display: false }
-          },
-          scales: isBar ? {
-            y: { beginAtZero: true },
-            x: { grid: { display: false } }
-          } : {}
-        }
-      });
-    },
 
-    toggleChartType() {
-      if (this._isToggling) return;
-      this._isToggling = true;
-
-      this.chartType = this.chartType === 'bar' ? 'pie' : 'bar';
-      localStorage.setItem('bst_chartType', this.chartType);
-
-      if (this.chartAgents) {
-        try { this.chartAgents.destroy(); } catch {}
-        this.chartAgents = null;
-      }
-
-      setTimeout(() => {
-        this.initChart();
-        this._isToggling = false;
-      }, 300);
-    },
-
-    updateChart() {
-      if (this.chartAgents) {
-        // Redraw chart if data is loaded, preventing full destroy/re-init
-        this.chartAgents.data.labels = this.supervisors.map(s => s.name);
-        this.chartAgents.data.datasets[0].data = this.supervisors.map(s => s.agent_count);
-        this.chartAgents.update();
-      } else {
-        // If chart hasn't been initialized yet, do it now
-        this.initChart();
-      }
-    },
-    
-    /* keep a live mirror of Alpine.store('toasts') into local toasts array for UI */
-    syncToastStore() {
-      try {
-        // Ensure Alpine.store is available before trying to sync
-        if (typeof Alpine.store !== 'function') return;
-
-        // Initialize store if it doesn't exist
-        if (!Alpine.store('toasts')) {
-            Alpine.store('toasts', { items: [], pushSimple(title, emoji, message){ this.items.push({title, emoji, message}) } });
-        }
-
-        const store = Alpine.store('toasts');
-        // reactive update - poll-based fallback
-        setInterval(() => {
-          if (JSON.stringify(this.toasts) !== JSON.stringify(store.items)) {
-            this.toasts = [...store.items];
-          }
-        }, 500);
-      } catch(e){}
-    },
-
-    /* navigation */
-    nav(viewName){
-      this.view = viewName;
-      this.modalOpen = false;
-      this.modalType = '';
-      this.modalStep = 1;
-      this.form = {};
-
-      const titleMap = {
-        dashboard:'Dashboard', supervisors:'Supervisors', agents:'Agents', pos:'POS Devices', logs:'Activity Logs', settings:'Settings', report:'Reports'
-      };
-      const subMap = {
-        dashboard:'Enterprise POS — Internal Use Only', supervisors:'Manage and track field supervisors', agents:'Manage field agents', pos:'Track POS device inventory', logs:'View system activity log', settings:'Manage system settings and backups', report:'Generate and export data reports'
-      };
-      const t = titleMap[viewName] || 'Dashboard';
-      const s = subMap[viewName] || '';
-      const elTitle = document.getElementById('pageTitle');
-      const elSub = document.getElementById('pageSub');
-      if (elTitle) elTitle.innerText = t;
-      if (elSub) elSub.innerText = s;
-    },
-
-    /* ---------- SERVER-SIDE: Supervisors (paging + sorting) ---------- */
-    async fetchSupervisors(){
-      try {
-        const start = (this.supPage - 1) * this.supPageSize;
-        const end = start + this.supPageSize - 1;
-        const { data, error } = await this.supabase.from('supervisors')
-          .select('*', { count: 'exact' })
-          .ilike('name', `%${this.filterText || ''}%`)
-          .order(this.supSortColumn, { ascending: this.supSortDir === 'asc' })
-          .range(start, end);
-        if(error) throw error;
-        this.supervisors = data || [];
-        // fetch total count separately (Supabase sometimes needs head:true)
-        const cnt = await this.supabase.from('supervisors').select('supervisor_id',{ count: 'exact', head: true }).ilike('name', `%${this.filterText || ''}%`);
-        this.supervisorsTotal = cnt.count || (data||[]).length;
-        // derived fields
-        await this.attachSupervisorDerived();
-        // Update supervisor select for modals
-        this.supSelect = this.supervisors || [];
-        this.updateChart();
-        this.updateCounts(); // Update counts after total is fetched
-      } catch(e){ console.error('fetchSupervisors', e); this.notifyError('Fetch supervisors failed', e); }
-    },
-
-    // derived fields for supervisors
-    async attachSupervisorDerived(){
-      try {
-        const { data: allAgents } = await this.supabase.from('agents').select('*');
-        const { data: allPos } = await this.supabase.from('pos_devices').select('*');
-        this.all_agents = allAgents || [];
-        this.pos_devices = (allPos || []).map(p => ({ ...p }));
-        for(const s of this.supervisors){
-          s.agent_count = (this.all_agents || []).filter(a => a.supervisor_id === s.supervisor_id).length;
-          s.pos_assigned = (this.pos_devices || []).filter(p => {
-            const ag = this.all_agents.find(x => x.agent_id === p.agent_id);
-            return ag && ag.supervisor_id === s.supervisor_id;
-          }).length;
-        }
-      } catch(e){ console.error('attachSupervisorDerived', e);}
-    },
-
-    changeSort(column, which){
-      if(which === 'supervisors'){
-        if(this.supSortColumn === column) this.supSortDir = this.supSortDir === 'asc' ? 'desc' : 'asc';
-        else { this.supSortColumn = column; this.supSortDir = 'asc'; }
-        this.fetchSupervisors();
-      } else {
-        if(this.agtSortColumn === column) this.agtSortDir = this.agtSortDir === 'asc' ? 'desc' : 'asc';
-        else { this.agtSortColumn = column; this.agtSortDir = 'asc'; }
-        this.fetchAgents();
-      }
-    },
-
-    changePage(direction, which){
-      if(which==='supervisors'){
-        if(direction==='next') this.supPage++; else if(direction==='prev' && this.supPage>1) this.supPage--;
-        this.fetchSupervisors();
-      } else {
-        if(direction==='next') this.agtPage++; else if(direction==='prev' && this.agtPage>1) this.agtPage--;
-        this.fetchAgents();
-      }
-    },
-
-    get supervisorsCountDisplay(){ return `${Math.min(this.supPage * this.supPageSize, this.supervisorsTotal || this.supervisors.length)} / ${this.supervisorsTotal || this.supervisors.length}`; },
-
-    /* ---------- SERVER-SIDE: Agents (paging + sorting) ---------- */
-    async fetchAgents(){
-      try {
-        const start = (this.agtPage - 1) * this.agtPageSize;
-        const end = start + this.agtPageSize - 1;
-        const { data, error } = await this.supabase.from('agents').select('*,supervisor:supervisor_id(name)').ilike('name', `%${this.filterText||''}%`).order(this.agtSortColumn, { ascending: this.agtSortDir==='asc' }).range(start, end);
-        if(error) throw error;
-        this.agents = (data || []).map(a => ({ ...a, supervisor_name: a.supervisor?.name || '' }));
-        const cnt = await this.supabase.from('agents').select('agent_id',{ count:'exact', head:true }).ilike('name', `%${this.filterText||''}%`);
-        this.agentsTotal = cnt.count || (data||[]).length;
-        // Also update all_agents for POS modal if needed
-        this.all_agents = (await this.supabase.from('agents').select('*')).data || [];
-        this.updateCounts(); // Update counts after total is fetched
-      } catch(e){ console.error('fetchAgents', e); this.notifyError('Fetch agents failed', e); }
-    },
-
-    get agentsCountDisplay(){ return `${Math.min(this.agtPage * this.agtPageSize, this.agentsTotal || this.agents.length)} / ${this.agentsTotal || this.agents.length}`; },
-
-    /* ---------- POS & Logs ---------- */
-    async fetchPOS(){
-      try {
-        const { data, error } = await this.supabase.from('pos_devices').select('*,agent_id(name,agent_id)').order('serial_number');
-        if(error) throw error;
-        this.pos_devices = (data || []).map(p => ({ ...p, agent_name: p.agent_id ? p.agent_id.name : '' }));
-        this.updateCounts(); // Update counts after total is fetched
-      } catch(e){ console.error('fetchPOS', e); this.notifyError('Fetch POS failed', e); }
-    },
-
-    async fetchActivityLogs(){
-      try {
-        const { data, error } = await this.supabase.from('activity_logs').select('*').order('created_at', { ascending: false }).limit(1000);
-        if(error) throw error;
-        this.activity_logs = data || [];
-      } catch(e){ console.error('fetchActivityLogs', e); this.notifyError('Fetch logs failed', e); }
-    },
-
-    applyLogsFilter(){}, // client-side filtered via getter
-
-    get filteredActivityLogs(){
-      if(!this.logsFilter) return this.activity_logs;
-      const filter = this.logsFilter.toLowerCase();
-      return this.activity_logs.filter(l => 
-        (l.action||'').toLowerCase().includes(filter) || 
-        (l.details||'').toLowerCase().includes(filter) ||
-        (l.user_name||'').toLowerCase().includes(filter)
-      );
-    },
-
-    applySearch(){ this.supPage=1; this.agtPage=1; this.fetchSupervisors(); this.fetchAgents(); },
-
-    async refreshAll(){ await Promise.all([ this.fetchSupervisors(), this.fetchAgents(), this.fetchPOS(), this.fetchActivityLogs() ]); this.updateCounts(); this.updateChart(); },
-
-    updateCounts(){ this.counts.supervisors = this.supervisorsTotal || this.supervisors.length; this.counts.agents = this.agentsTotal || this.agents.length; this.counts.pos = this.pos_devices.length; },
-
-    /* ---------- MODALS ---------- */
-    openModal(type, payload=null){
-      this.modalType = type; this.modalStep = 1;
-      this.form = payload ? JSON.parse(JSON.stringify(payload)) : {};
-      this.modalTitle = ({ addSupervisor:'Add Supervisor', editSupervisor:'Edit Supervisor', addAgent:'Add Agent', editAgent:'Edit Agent', addPOS:'Add POS', editPOS:'Edit POS' })[type] || '';
-      this.modalSubtitle = 'Step 1 — Details';
-      this.modalOpen = true;
-      if (type.includes('Agent')) {
-          this.supSelect = this.supervisors.length ? this.supervisors : [];
-      }
-    },
-
-    closeModal(){ this.modalOpen=false; this.modalType=''; this.modalStep=1; this.form={}; this.modalTitle=''; this.modalSubtitle=''; },
-
-    nextModalStep(){ if(this.modalStep<2){ this.modalStep++; this.modalSubtitle='Step 2 — Confirm'; } },
-    prevModalStep(){ if(this.modalStep>1){ this.modalStep--; this.modalSubtitle='Step 1 — Details'; } },
-
-    /* ---------- Supervisor CRUD ---------- */
-    async addSupervisorConfirm(){
-      if(!this.form.name) return alert('Name required');
-      try {
-        const { error } = await this.supabase.from('supervisors').insert([{ name: this.form.name, region: this.form.region }]);
-        if(error) throw error;
-        await this.logActivity('Added supervisor', `Name: ${this.form.name}`);
-        Alpine.store('toasts').pushSimple('Supervisor added','👥', this.form.name);
-        this.closeModal(); this.fetchSupervisors(); this.fetchAgents(); this.fetchPOS();
-      } catch(e){ alert(e.message || 'Failed to add supervisor'); console.error(e); }
-    },
-
-    async updateSupervisorConfirm(){
-      if(!this.form.name) return alert('Name required');
-      try {
-        const { error } = await this.supabase.from('supervisors').update({ name: this.form.name, region: this.form.region }).eq('supervisor_id', this.form.supervisor_id);
-        if(error) throw error;
-        await this.logActivity('Edited supervisor', `ID: ${this.form.supervisor_id}`);
-        Alpine.store('toasts').pushSimple('Supervisor updated','✏️', this.form.name);
-        this.closeModal(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to update supervisor'); console.error(e); }
-    },
-
-    confirmDeleteSupervisor(id){ if(confirm('Delete supervisor?')) this.deleteSupervisor(id); },
-
-    async deleteSupervisor(id){
-      try {
-        const { error } = await this.supabase.from('supervisors').delete().eq('supervisor_id', id);
-        if(error) throw error;
-        await this.logActivity('Deleted supervisor', `ID: ${id}`);
-        Alpine.store('toasts').pushSimple('Supervisor deleted','🗑️', `ID: ${id}`);
-        this.fetchSupervisors(); this.fetchAgents(); this.fetchPOS();
-      } catch(e){ alert(e.message || 'Failed to delete supervisor'); console.error(e); }
-    },
-
-    /* ---------- Agent CRUD ---------- */
-    async addAgentConfirm(){
-      if(!this.form.name || !this.form.supervisor_id) return alert('Name & Supervisor required');
-      try {
-        const { error } = await this.supabase.from('agents').insert([{ name: this.form.name, contact: this.form.contact, location: this.form.location, supervisor_id: this.form.supervisor_id }]);
-        if(error) throw error;
-        await this.logActivity('Added agent', `Name: ${this.form.name}`);
-        Alpine.store('toasts').pushSimple('Agent added','👤', this.form.name);
-        this.closeModal(); this.fetchAgents(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to add agent'); console.error(e); }
-    },
-
-    async updateAgentConfirm(){
-      try {
-        const { error } = await this.supabase.from('agents').update({ name: this.form.name, contact: this.form.contact, location: this.form.location, supervisor_id: this.form.supervisor_id }).eq('agent_id', this.form.agent_id);
-        if(error) throw error;
-        await this.logActivity('Edited agent', `ID: ${this.form.agent_id}`);
-        Alpine.store('toasts').pushSimple('Agent updated','✏️', this.form.name);
-        this.closeModal(); this.fetchAgents(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to update agent'); console.error(e); }
-    },
-
-    confirmDeleteAgent(id){ if(confirm('Delete agent?')) this.deleteAgent(id); },
-
-    async deleteAgent(id){
-      try {
-        const { error } = await this.supabase.from('agents').delete().eq('agent_id', id);
-        if(error) throw error;
-        await this.logActivity('Deleted agent', `ID: ${id}`);
-        Alpine.store('toasts').pushSimple('Agent deleted','🗑️', `ID: ${id}`);
-        this.fetchAgents(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to delete agent'); console.error(e); }
-    },
-
-    /* ---------- POS CRUD ---------- */
-    async addPOSConfirm(){
-      if(!this.form.serial_number) return alert('Serial required');
-      try {
-        const { error } = await this.supabase.from('pos_devices').insert([{ serial_number: this.form.serial_number, agent_id: this.form.agent_id || null, date_issued: null, status: this.form.status || 'Available', condition: this.form.condition || 'Good', notes: this.form.notes || '' }]);
-        if(error) throw error;
-        await this.logActivity('Added POS', `Serial: ${this.form.serial_number}`);
-        Alpine.store('toasts').pushSimple('POS added','📦', this.form.serial_number);
-        this.closeModal(); this.fetchPOS(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to add POS'); console.error(e); }
-    },
-
-    async updatePOSConfirm(){
-      try {
-        const { error } = await this.supabase.from('pos_devices').update({ serial_number: this.form.serial_number, agent_id: this.form.agent_id || null, status: this.form.status, condition: this.form.condition, notes: this.form.notes || '' }).eq('pos_id', this.form.pos_id);
-        if(error) throw error;
-        await this.logActivity('Edited POS', `POS ID: ${this.form.pos_id}`);
-        Alpine.store('toasts').pushSimple('POS updated','📦', this.form.serial_number);
-        this.closeModal(); this.fetchPOS(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to update POS'); console.error(e); }
-    },
-
-    confirmDeletePOS(id){ if(confirm('Delete POS?')) this.deletePOS(id); },
-
-    async deletePOS(id){
-      try {
-        const { error } = await this.supabase.from('pos_devices').delete().eq('pos_id', id);
-        if(error) throw error;
-        await this.logActivity('Deleted POS', `POS ID: ${id}`);
-        Alpine.store('toasts').pushSimple('POS deleted','📦', `ID: ${id}`);
-        this.fetchPOS(); this.fetchSupervisors();
-      } catch(e){ alert(e.message || 'Failed to delete POS'); console.error(e); }
-    },
-
-    /* ---------- Activity logs & Notifications ---------- */
-    async logActivity(action, details=''){
-      try { await this.supabase.from('activity_logs').insert([{ user_role:'ICT', user_name:this.settings.admin_name||'ICT', action, details }]); } catch(e){ console.error(e); }
-      this.fetchActivityLogs();
-    },
-
-    /* ---------- Realtime (Supabase Realtime channels) ---------- */
-    setupRealtime(){
-      try {
-        // Ensure supabase is available
-        if(!this.supabase) return;
+        remove(id) {
+            const index = this.items.findIndex(i => i.id === id);
+            if (index > -1) {
+                this.items[index].show = false;
+                setTimeout(() => {
+                    this.items = this.items.filter(i => i.id !== id);
+                }, 300); // Wait for transition
+            }
+        },
         
-        const channel = this.supabase.channel('realtime-ict')
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'activity_logs' }, payload => {
-            try { Alpine.store('toasts').pushSimple(payload.new.action || 'Activity','🧾', payload.new.details || ''); } catch {}
-            this.fetchActivityLogs();
-          })
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'supervisors' }, payload => {
-            try { Alpine.store('toasts').pushSimple('Supervisor added','👥', payload.new.name || ''); } catch {}
-            this.fetchSupervisors();
-          })
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'agents' }, payload => {
-            try { Alpine.store('toasts').pushSimple('Agent added','👤', payload.new.name || ''); } catch {}
-            this.fetchAgents();
-          })
-          .on('postgres_changes', { event:'INSERT', schema:'public', table:'pos_devices' }, payload => {
-            try { Alpine.store('toasts').pushSimple('POS added','📦', payload.new.serial_number || ''); } catch {}
-            this.fetchPOS();
-          })
-          .subscribe();
-      } catch(e){ console.warn('Realtime setup failed', e); }
-    },
-
-    /* ---------- SETTINGS & BACKUP ---------- */
-    async loadSettings(){ try { const { data } = await this.supabase.from('settings').select('*').eq('id',1).maybeSingle(); if(data) this.settings = { ...this.settings, ...data }; } catch(e){ console.warn('loadSettings', e); } },
-    async saveSettings(){ try { await this.supabase.from('settings').upsert([{ id:1, admin_name:this.settings.admin_name, email:this.settings.email, theme:this.settings.theme, notifications:this.settings.notifications }], { onConflict:'id' }); Alpine.store('toasts').pushSimple('Settings saved','⚙️',''); await this.logActivity('Updated settings', `Admin: ${this.settings.admin_name}`); } catch(e){ alert('Error saving settings'); console.error(e); } },
-
-    async exportBackupJSON(){
-      try {
-        const [supRes, agRes, posRes, reqRes, logsRes] = await Promise.all([
-          this.supabase.from('supervisors').select('*'),
-          this.supabase.from('agents').select('*'),
-          this.supabase.from('pos_devices').select('*'),
-          this.supabase.from('pos_requests').select('*'),
-          this.supabase.from('activity_logs').select('*')
-        ]);
-        const payload = { supervisors: supRes.data||[], agents: agRes.data||[], pos_devices: posRes.data||[], pos_requests: reqRes.data||[], activity_logs: logsRes.data||[], settings: this.settings };
-        const blob = new Blob([JSON.stringify(payload,null,2)], { type:'application/json' });
-        const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download=`backup_${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
-        Alpine.store('toasts').pushSimple('Backup downloaded','📥','');
-      } catch(e){ alert('Backup failed'); console.error(e); }
-    },
-
-    async fetchAgentsPerSupervisor() {
-      try {
-        const { data: supervisors, error: supErr } = await this.supabase
-          .from('supervisors')
-          .select('supervisor_id, name');
-        if (supErr) throw supErr;
-
-        const { data: agents, error: agErr } = await this.supabase
-          .from('agents')
-          .select('agent_id, name, contact, supervisor_id');
-        if (agErr) throw agErr;
-
-        this.agentsPerSupervisor = supervisors.map(s => {
-          return {
-            supervisor_id: s.supervisor_id,
-            supervisor: s.name,
-            agents: agents.filter(a => a.supervisor_id === s.supervisor_id)
-          }
-        });
-        // Set default selection if none is selected
-        if (!this.selectedSupervisorId && this.agentsPerSupervisor.length > 0) {
-            this.selectedSupervisorId = this.agentsPerSupervisor[0].supervisor_id;
+        showSuccess(title, message) {
+            this.add({ title, message, emoji: '✅', borderClass: 'border-green-500' });
+        },
+        showError(title, message) {
+            this.add({ title, message, emoji: '❌', borderClass: 'border-red-500' });
+        },
+        showInfo(title, message) {
+            this.add({ title, message, emoji: '💡', borderClass: 'border-sky-500' });
+        },
+        clearHistory() {
+            this.history = [];
         }
-      } catch(e) {
-        console.error('fetchAgentsPerSupervisor', e);
-        this.notifyError('Failed to fetch report', e);
-      }
-    },
-
-    /* ---------- Helpers ---------- */
-    notifyError(title, e){ 
-      try { 
-          // Ensure Alpine store for toasts is initialized before pushing
-          if (typeof Alpine.store !== 'function' || !Alpine.store('toasts')) return;
-          Alpine.store('toasts').pushSimple(title,'⚠️', (e && e.message) ? e.message : String(e)); 
-      } catch(e2){} 
-    },
-
-    // Wrapper functions for UI
-    confirmDeleteSupervisor(id){ if(confirm('Delete supervisor?')) this.deleteSupervisor(id); },
-    confirmDeleteAgent(id){ if(confirm('Delete agent?')) this.deleteAgent(id); },
-    confirmDeletePOS(id){ if(confirm('Delete POS?')) this.deletePOS(id); }
-  
-  };
-}
-
-// Expose app() to the global window object for Alpine to initialize
-window.app = app;
-
-
-// 3. Floating AI Chat Logic (Consolidated/Cleaned)
-document.addEventListener('DOMContentLoaded', () => {
-    // --- AI Chat Logic ---
-    const openBtn = document.getElementById("openAIButton");
-    const closeBtn = document.getElementById("closeAIButton");
-    const chatWindow = document.getElementById("aiChatWindow");
-    const chatOutput = document.getElementById("chatOutput");
-    const chatInput = document.getElementById("chatInput");
-    const sendBtn = document.getElementById("sendBtn");
-
-    if (!openBtn || !chatWindow || !chatOutput || !chatInput || !sendBtn) return; // Exit if chat UI is not present
-
-    // Static context (should be dynamically pulled from Alpine.js state in a full app)
-    const context = {
-        supervisors: [
-            { id: 1, name: "John Doe" },
-            { id: 2, name: "Jane Smith" }
-        ],
-        agents: [
-            { id: 101, name: "Agent A", supervisor_id: 1 },
-            { id: 102, name: "Agent B", supervisor_id: 2 }
-        ],
-        devices: [
-            { id: 1001, agent_id: 101, serial: "POS-001" },
-            { id: 1002, agent_id: 102, serial: "POS-002" }
-        ]
-    };
-
-    // Open/Close AI Window
-    openBtn.addEventListener("click", () => {
-        chatWindow.style.display = "flex";
-        if (window.lucide) window.lucide.createIcons(); // Re-render Lucide icons
-    });
-    closeBtn.addEventListener("click", () => chatWindow.style.display = "none");
-
-    // Function to create bubble (The superior, bubble-style version)
-    function addBubble(text, sender) {
-        const bubble = document.createElement("div");
-        bubble.textContent = text;
-        bubble.style.padding = "8px 12px";
-        bubble.style.borderRadius = "15px";
-        bubble.style.maxWidth = "80%";
-        bubble.style.wordWrap = "break-word";
-        bubble.style.alignSelf = sender === "user" ? "flex-end" : "flex-start";
-        bubble.style.background = sender === "user" ? "#007bff" : "#333";
-        bubble.style.color = sender === "user" ? "#fff" : "#fff";
-        chatOutput.appendChild(bubble);
-        chatOutput.scrollTop = chatOutput.scrollHeight;
-    }
-
-    // Send Message
-    sendBtn.addEventListener("click", async () => {
-        const message = chatInput.value.trim();
-        if (!message) return;
-
-        addBubble(message, "user");
-        chatInput.value = "";
-
-        try {
-            // NOTE: This relies on an external server running at http://localhost:3000/ask
-            const res = await fetch("http://localhost:3000/ask", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message, context })
-            });
-            const data = await res.json();
-            addBubble(data.reply, "assistant");
-        } catch (err) {
-            // This handles the ERR_CONNECTION_REFUSED error
-            addBubble("Sorry, I am still under development. (Error: Connection Refused to http://localhost:3000)", "assistant");
-        }
-    });
-
-    // Enter key support
-    chatInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") sendBtn.click();
     });
 });
+
+
+// --- Alpine.js App Data and Logic ---
+
+// The main Alpine.js data object
+function app() {
+    return {
+        // --- Core State ---
+        view: 'dashboard',
+        isSidebarOpen: false,
+        showNotificationsSidebar: false,
+        globalSearch: '',
+        isAppLoaded: false, 
+
+        
+        // --- Data from Supabase ---
+        supervisors: [],
+        agents: [],
+        posDevices: [],
+        activityLogs: [],
+        alerts: [],
+        alertFilters: {
+            status: 'ALL',
+            severity: 'ALL',
+        },
+
+        // [AI INTEGRATION START] - New AI Chat State
+        aiChatWindowOpen: false,
+        chatInput: '',
+        // FIX: Moved SYSTEM_PROMPT inside the app() function to resolve ReferenceError
+        SYSTEM_PROMPT: `You are a friendly and intelligent IT Asset Management Assistant named 'VANGUARD'. 
+Your primary function is to help the administrator analyze and manage inventory data. 
+You can answer questions about supervisors, agents, and POS devices. 
+You have access to a data lookup tool for real-time information. 
+When asked a question about the current inventory or staff, use the 'lookupData' tool. 
+Be concise and focus on the data requested.`,
+        chatHistory: [
+             { 
+                role: 'system', 
+                content: this.SYSTEM_PROMPT, // FIX: Use 'this.SYSTEM_PROMPT'
+                id: 'sys-0',
+                timestamp: Date.now()
+             },
+             { 
+                role: 'assistant', 
+                content: "Hello! I'm Senior Man, your POS Management Assistant. How can I help you analyze the data today?", 
+                id: 'ai-0',
+                timestamp: Date.now() + 1 
+             }
+        ],
+        isAITyping: false,
+        aiConfig: {
+            // FIX: Inlined AI Configuration
+            AI_API_URL: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
+            AI_API_KEY: 'AIzaSyDVALjRSB0jKvBX33QdXD3Esq0noaX7efQ',
+            AI_MODEL: 'gemini-2.5-flash',
+        },
+        // [AI INTEGRATION END]
+
+        // --- Dashboard / Filters ---
+        counts: { supervisors: 0, agents: 0, pos: 0, requests_pending: 0 },
+        selectedSupervisorFilterId: '',
+        agentSupervisorData: { names: [], counts: [] },
+        posConditionData: { labels: [], counts: [] },
+        updates: { currentVersion: '2.1.0' },
+
+        logFilters: {
+            searchQuery: '',
+            actionType: 'ALL',
+            startDate: '', // YYYY-MM-DD
+            endDate: '',   // YYYY-MM-DD
+        },
+
+        // --- User/Settings ---
+        currentUser: { name: 'ICT Admin', role: 'Admin', id: 'ADM001' },
+        settings: { admin_name: 'ICT Admin', email: 'admin@enterprise.com' },
+
+        // --- Modal State ---
+        showModal: false,
+        modalView: '',
+        modalTitle: '',
+        form: {}, // Holds form data for Add/Edit operations
+
+        // --- Chart Instances ---
+        agentsChartInstance: null,
+        posConditionChartInstance: null,
+
+
+        // --- Initialization and Watchers ---
+        // --- Initialization and Watchers ---
+        initApp() {
+            this.fetchData(); 
+            this.updateTime();
+            setInterval(() => this.updateTime(), 1000);
+            this.loadTheme(); // <-- This now calls the method defined below
+            
+            // Watchers remain the same...
+            this.$watch('view', () => {
+                this.$nextTick(() => {
+                    lucide.createIcons();
+                });
+            });
+
+            this.$nextTick(() => {
+                lucide.createIcons();
+            });
+            
+            this.$watch('aiChatWindowOpen', (open) => {
+                if (open) {
+                    this.$nextTick(() => this.scrollToBottom());
+                }
+            });
+        },
+        
+        // FIX: The loadTheme function is now correctly defined as a method
+        loadTheme() {
+            // Placeholder for theme loading logic
+            console.log("Theme loaded successfully (defaulting to light mode).");
+        },
+        
+        // [AI INTEGRATION START] - Alpine-friendly AI Setup & Helpers
+        
+        /**
+         * Scrolls the chat window to the bottom using its ref
+         */
+        scrollToBottom() {
+            const chatOutput = this.$refs.chatOutput; 
+            if (chatOutput) {
+                chatOutput.scrollTop = chatOutput.scrollHeight;
+            }
+        },
+
+        /**
+         * Formats a timestamp into chat time (e.g., "10:30 AM")
+         */
+        getChatTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            const date = new Date(timestamp);
+            return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        },
+
+        /**
+         * The core function that the AI calls to retrieve real-time data.
+         * @param {string} entity - The table to look up ('supervisors', 'agents', 'pos_devices', 'alerts').
+         * @returns {string} - JSON string of the requested data.
+         */
+        lookupData(entity) {
+            const dataMap = {
+                'supervisors': this.supervisors,
+                'agents': this.agents,
+                'pos_devices': this.posDevices,
+                'alerts': this.alerts.filter(a => a.status !== 'Resolved'),
+            };
+
+            const data = dataMap[entity];
+            if (!data) {
+                return JSON.stringify({ error: `Entity '${entity}' not found or not supported.` });
+            }
+            
+            // Limit the data size to prevent large responses, especially for agents/pos
+            const MAX_RECORDS = 10;
+            const summary = data.length > MAX_RECORDS 
+                ? data.slice(0, MAX_RECORDS).map(item => {
+                    // Reduce data complexity for tool input
+                    if (entity === 'agents') return { id: item.agent_id, name: item.name, supervisor: item.supervisor_name, location: item.location };
+                    if (entity === 'pos_devices') return { serial: item.serial_number, agent: item.agent_name, status: item.status };
+                    if (entity === 'alerts') return { id: item.id, title: item.title, severity: item.severity, status: item.status };
+                    return item;
+                })
+                : data.map(item => {
+                    if (entity === 'agents') return { id: item.agent_id, name: item.name, supervisor: item.supervisor_name, location: item.location };
+                    if (entity === 'pos_devices') return { serial: item.serial_number, agent: item.agent_name, status: item.status };
+                    if (entity === 'alerts') return { id: item.id, title: item.title, severity: item.severity, status: item.status };
+                    return item;
+                });
+            
+            const count = data.length;
+            
+            return JSON.stringify({ 
+                count: count,
+                summary: summary,
+                note: count > MAX_RECORDS ? `Showing a summary of the first ${MAX_RECORDS} records out of ${count} total.` : null
+            });
+        },
+
+        /**
+         * Handles the AI's request to call a function/tool.
+         * @param {object} functionCall - The function call object (tool_call) from the AI.
+         * @returns {object} - The tool output in a message format.
+         */
+        handleFunctionCall(functionCall) {
+            if (functionCall.function && functionCall.function.name === 'lookupData') {
+                try {
+                    const args = JSON.parse(functionCall.function.arguments);
+                    const output = this.lookupData(args.entity);
+                    return {
+                        role: 'tool',
+                        tool_call_id: functionCall.id,
+                        content: output,
+                        id: Date.now() + 3
+                    };
+                } catch (e) {
+                    console.error('Error parsing function arguments:', e);
+                    return {
+                        role: 'tool',
+                        tool_call_id: functionCall.id,
+                        content: JSON.stringify({ error: 'Invalid arguments provided for lookupData.' }),
+                        id: Date.now() + 3
+                    };
+                }
+            }
+
+            const unknownFunctionName = functionCall.function ? functionCall.function.name : 'Unknown/Undefined';
+            
+            return {
+                role: 'tool',
+                tool_call_id: functionCall.id,
+                content: JSON.stringify({ error: `Unknown function: ${unknownFunctionName}` }),
+                id: Date.now() + 3
+            };
+        },
+
+
+        /**
+         * Sends the user message to the AI API and handles the response.
+         */
+        async sendAIChatMessage() {
+            const userMessage = this.chatInput.trim();
+            if (!userMessage || this.isAITyping) return;
+
+            // 1. Add user message to history
+            const userMsg = { role: 'user', content: userMessage, id: Date.now(), timestamp: Date.now() };
+            this.chatHistory.push(userMsg);
+            this.chatInput = '';
+            this.isAITyping = true;
+            this.$nextTick(() => this.scrollToBottom());
+            
+            const tools = [
+                {
+                    type: 'function',
+                    function: {
+                        name: 'lookupData',
+                        description: 'Retrieves real-time data from the POS tracking system for a specified entity.',
+                        parameters: {
+                            type: 'object',
+                            properties: {
+                                entity: {
+                                    type: 'string',
+                                    description: 'The name of the entity table to query. Must be one of: "supervisors", "agents", "pos_devices", or "alerts".'
+                                }
+                            },
+                            required: ['entity']
+                        }
+                    }
+                }
+            ];
+
+            try {
+                let aiResponse;
+                let functionCallRequired = true;
+
+                // Loop for multi-turn tool use (Function Calling)
+                while (functionCallRequired) {
+                    
+                    // Filter history to prepare messages for the API call (excluding local IDs/timestamps)
+                    const apiMessages = this.chatHistory.map(msg => {
+                        const { id, timestamp, ...rest } = msg;
+                        return rest;
+                    });
+                    
+                    const response = await fetch(this.aiConfig.AI_API_URL, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            // The Authorization header format depends on the AI API (e.g., OpenAI/Gemini/Custom)
+                            // This example assumes an OpenAI-like structure for the key. Adjust as needed.
+                            'Authorization': `Bearer ${this.aiConfig.AI_API_KEY}` 
+                        },
+                        body: JSON.stringify({
+                            model: this.aiConfig.AI_MODEL,
+                            messages: [
+                                // FIX: Use 'this.SYSTEM_PROMPT' instead of the now-removed global constant
+                                { role: 'system', content: this.SYSTEM_PROMPT },
+                                ...apiMessages
+                            ],
+                            tools: tools,
+                        })
+                    });
+                    
+                    if (!response.ok) throw new Error(`HTTP Error: ${response.statusText}`);
+                    const jsonResponse = await response.json();
+                    
+                    // The structure of the response depends on the AI model (e.g., OpenAI vs Google Gen AI)
+                    // This block assumes a common OpenAI-like response structure
+                    aiResponse = jsonResponse.choices[0].message;
+                    aiResponse.id = Date.now() + 2;
+                    aiResponse.timestamp = Date.now();
+                    
+                    // 2. Check for Function Call
+                    if (aiResponse.tool_calls && aiResponse.tool_calls.length > 0) {
+                        
+                        // Add the AI's tool call request to the history
+                        this.chatHistory.push(aiResponse);
+
+                        // Process the tool call and get the result
+                        const toolCall = aiResponse.tool_calls[0];
+                        const toolOutput = this.handleFunctionCall(toolCall);
+
+                        // 3. Add tool output to history and loop back to send it to the AI
+                        this.chatHistory.push(toolOutput);
+                        functionCallRequired = true; // Continue the loop to get the final text response
+
+                    } else if (aiResponse.content) {
+                        // 4. It was a direct text response, add to history and exit loop
+                        this.chatHistory.push(aiResponse);
+                        functionCallRequired = false;
+                    } else {
+                        // Edge case: no content and no tool call (should not happen)
+                        const errorMsg = { role: 'assistant', content: 'The AI provided an empty response.', id: Date.now() + 4, timestamp: Date.now() };
+                        this.chatHistory.push(errorMsg);
+                        functionCallRequired = false;
+                    }
+
+                }
+
+} catch (error) {
+    console.error('AI API Error:', error);
+    const errorMessage = { 
+        role: 'assistant', 
+        content: 'I am currently unable to connect to my AI service. Please check the API configuration and network connection. Details in console.',
+        id: Date.now() + 5 
+    };
+    this.chatHistory.push(errorMessage);
+    Alpine.store('toasts').showError('AI Error', 'Failed to get response from AI service.');
+                
+            } finally {
+                this.isAITyping = false;
+                this.$nextTick(() => {
+                    // FIX: Auto-focus the input field after sending a message
+                    // Assuming the input field in index.html has x-ref="chatInputRef"
+                    if (this.$refs.chatInputRef) {
+                        this.$refs.chatInputRef.focus();
+                    }
+                    this.scrollToBottom();
+                });
+            }
+        },
+        
+        // [AI INTEGRATION END]
+
+        // --- Clock & Greeting Logic ---
+        updateTime() {
+            const now = new Date();
+            const timeElement = document.getElementById('time');
+            if (timeElement) {
+                timeElement.textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+            }
+
+            const greetingElement = document.getElementById('greeting');
+            const hour = now.getHours();
+            let greeting;
+            if (hour < 12) {
+                greeting = 'Good Morning 🌄';
+            } else if (hour < 18) {
+                greeting = 'Good Afternoon☀️';
+            } else {
+                greeting = 'Good Evening🌙';
+            }
+            if (greetingElement) {
+                greetingElement.textContent = `${greeting}, ${this.currentUser.name}!`;
+            }
+        },
+
+        // --- Data Fetching ---
+        async fetchData() {
+            // Use Promise.all to fetch all core data concurrently
+            await Promise.all([
+                this.fetchSupervisors(),
+                this.fetchAgents(),
+                this.fetchPOSDevices(),
+                this.fetchActivityLogs(),
+                this.fetchAlerts()
+            ]);
+            
+            this.prepareAgentSupervisorData();
+            this.preparePOSConditionData();
+            
+            this.$nextTick(() => {
+                this.initAgentsChart();
+                this.initPOSConditionChart();
+                
+                // Set the state to true to hide the preloader
+                this.isAppLoaded = true; 
+            
+            });
+        },
+
+        async fetchSupervisors() {
+            const { data, error } = await supabaseClient.from('supervisors').select('*');
+            if (error) {
+                Alpine.store('toasts').showError('Data Error', 'Could not fetch supervisors.');
+                console.error('Error fetching supervisors:', error);
+            } else {
+                this.supervisors = data;
+                this.counts.supervisors = data.length;
+            }
+        },
+
+        async fetchAgents() {
+            // Fetch agents and their supervisor names
+            const { data, error } = await supabaseClient
+                .from('agents')
+                .select('*, supervisors(name)'); // Join supervisors table
+            
+            if (error) {
+                Alpine.store('toasts').showError('Data Error', 'Could not fetch agents.');
+                console.error('Error fetching agents:', error);
+            } else {
+                this.agents = data.map(agent => ({
+                    ...agent,
+                    supervisor_name: agent.supervisors ? agent.supervisors.name : 'Unassigned'
+                }));
+                this.counts.agents = data.length;
+            }
+        },
+
+       // main.js - inside function app()
+
+        async fetchPOSDevices() {
+            // Fetch POS devices and their assigned agent names
+            const { data, error } = await supabaseClient
+                .from('pos_devices')
+                .select('*, agents(name)'); // Join agents table
+            
+            if (error) {
+                Alpine.store('toasts').showError('Data Error', 'Could not fetch POS devices.');
+                console.error('Error fetching POS devices:', error);
+            } else {
+                this.posDevices = data.map(pos => ({
+                    ...pos,
+                    agent_name: pos.agents ? pos.agents.name : null,
+                    formatted_date_issued: pos.date_issued ? formatDate(pos.date_issued) : null,
+                }));
+                this.counts.pos = data.length;
+                
+                // ✅ FIX 1: Count POS where STATUS is 'Maintenance' to align with pending requests.
+                // Replaces the old 'Faulty' check.
+                this.counts.requests_pending = this.posDevices.filter(p => p.status === 'Maintenance').length;
+            }
+        },
+        
+        /**
+         * Fetches all alerts from the Supabase 'alerts' table.
+         */
+        async fetchAlerts() {
+            try {
+                const { data, error } = await supabaseClient // Use supabaseClient
+                    .from('alerts')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+                
+                if (error) throw error;
+                this.alerts = data;
+                Alpine.store('toasts').showSuccess('Alerts Loaded', `${data.length} system alerts fetched successfully.`);
+            } catch (error) {
+                console.error('Error fetching alerts:', error.message);
+                Alpine.store('toasts').showError('Error', 'Failed to fetch system alerts.');
+            }
+        },
+
+        /**
+         * Updates the status of a specific alert.
+         */
+        async updateAlertStatus(id, newStatus) {
+            if (!confirm(`Are you sure you want to mark this alert as ${newStatus}?`)) return;
+            try {
+                const { error } = await supabaseClient // Use supabaseClient
+                    .from('alerts')
+                    .update({ status: newStatus })
+                    .eq('id', id);
+
+                if (error) throw error;
+
+                // Update local state to reflect the change
+                const index = this.alerts.findIndex(a => a.id === id);
+                if (index !== -1) {
+                    this.alerts[index].status = newStatus;
+                }
+                Alpine.store('toasts').showSuccess('Success', `Alert ${id} status updated to ${newStatus}.`);
+            } catch (error) {
+                console.error('Error updating alert status:', error.message);
+                Alpine.store('toasts').showError('Error', 'Failed to update alert status.');
+            }
+        },
+
+        /**
+         * Helper to format the created_at time for display.
+         */
+        formatAlertTime(timestamp) {
+            if (!timestamp) return 'N/A';
+            return new Date(timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        },
+
+
+        async fetchActivityLogs() {
+            const { data, error } = await supabaseClient
+                .from('activity_logs')
+                .select('*')
+                .order('created_at', { ascending: false })
+                .limit(10); // Fetching only the 10 most recent logs for the sidebar
+            if (error) {
+                console.error('Error fetching activity logs:', error);
+            } else {
+                this.activityLogs = data;
+            }
+        },
+
+        // --- Filtering Logic ---
+        filteredSupervisors() {
+            if (!this.globalSearch) {
+                return this.supervisors;
+            }
+            const search = this.globalSearch.toLowerCase();
+            return this.supervisors.filter(s => 
+                s.name.toLowerCase().includes(search) || 
+                s.region.toLowerCase().includes(search) || 
+                s.contact.includes(search)
+            );
+        },
+
+        filteredAgents() {
+            let filtered = this.agents;
+            if (this.selectedSupervisorFilterId) {
+                // FIX: Use non-strict equality (==) to correctly compare the string ID from the dropdown
+                // with the number/BIGINT ID from the database (a.supervisor_id).
+                filtered = filtered.filter(a => a.supervisor_id == this.selectedSupervisorFilterId);
+            }
+
+            if (!this.globalSearch) {
+                return filtered;
+            }
+
+            const search = this.globalSearch.toLowerCase();
+            return filtered.filter(a => 
+                a.name.toLowerCase().includes(search) || 
+                a.location.toLowerCase().includes(search) || 
+                a.supervisor_name.toLowerCase().includes(search)
+            );
+        },
+
+        filteredPOS() {
+            if (!this.globalSearch) {
+                return this.posDevices;
+            }
+            const search = this.globalSearch.toLowerCase();
+            return this.posDevices.filter(p => 
+                p.serial_number.toLowerCase().includes(search) || 
+                p.agent_name?.toLowerCase().includes(search) || 
+                p.status.toLowerCase().includes(search)
+            );
+        },
+        
+        filteredActivityLogs() {
+            let filtered = this.activityLogs;
+
+            // Filter by Action Type
+            if (this.logFilters.actionType !== 'ALL') {
+                filtered = filtered.filter(log => log.action.includes(this.logFilters.actionType));
+            }
+
+            // Filter by Search Query (details)
+            if (this.logFilters.searchQuery) {
+                const search = this.logFilters.searchQuery.toLowerCase();
+                filtered = filtered.filter(log => 
+                    JSON.stringify(log.details).toLowerCase().includes(search)
+                );
+            }
+
+            // Note: Date filtering is omitted for simplicity in this version but can be added here.
+            
+            return filtered;
+        },
+
+        filteredAlerts() {
+            return this.alerts.filter(alert => {
+                const statusMatch = this.alertFilters.status === 'ALL' || alert.status === this.alertFilters.status;
+                const severityMatch = this.alertFilters.severity === 'ALL' || alert.severity === this.alertFilters.severity;
+                return statusMatch && severityMatch;
+            });
+        },
+
+
+        // --- Chart Data Preparation ---
+        prepareAgentSupervisorData() {
+            const counts = {};
+            // Use the un-filtered agents data
+            this.agents.forEach(agent => {
+                const supervisorName = agent.supervisor_name || 'Unassigned';
+                counts[supervisorName] = (counts[supervisorName] || 0) + 1;
+            });
+            
+            // ENHANCEMENT 1: Sort the data by count (Agents assigned)
+            const sortedData = Object.entries(counts)
+                .map(([name, count]) => ({ name, count }))
+                .sort((a, b) => b.count - a.count); // Sort descending by count
+
+            this.agentSupervisorData.names = sortedData.map(item => item.name);
+            this.agentSupervisorData.counts = sortedData.map(item => item.count);
+
+            if (this.agentsChartInstance) {
+                this.updateAgentsChart();
+            }
+        },
+
+        // main.js - inside function app()
+
+        preparePOSConditionData() {
+            // ✅ FIX 2: Updated statuses to match the new schema states
+            const counts = {
+                'Available': 0,
+                'Deployed': 0,
+                'Maintenance': 0, // Now correctly linked to the pending request count
+                'Faulty': 0
+            };
+            this.posDevices.forEach(pos => {
+                const status = pos.status || 'Unknown';
+                if (counts.hasOwnProperty(status)) {
+                    counts[status]++;
+                }
+            });
+            this.posConditionData.labels = Object.keys(counts);
+            this.posConditionData.counts = Object.values(counts);
+
+            if (this.posConditionChartInstance) {
+                this.updatePOSConditionChart();
+            }
+        },
+
+        // --- Chart Rendering ---
+        initAgentsChart() {
+            const ctx = document.getElementById('agentsChart');
+            if (!ctx) return; // Exit if the canvas element is not in the DOM
+
+            // Destroy existing chart if it exists
+            if (this.agentsChartInstance) {
+                this.agentsChartInstance.destroy();
+            }
+
+            this.agentsChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: this.agentSupervisorData.names,
+                    datasets: [{
+                        label: 'Number of Agents',
+                        data: this.agentSupervisorData.counts,
+                        backgroundColor: '#0EA5E9', // sky-500
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    // ENHANCEMENT 2: Change to Horizontal Bar Chart
+                    indexAxis: 'y', 
+                    scales: {
+                        x: { // X-axis is now the count (value axis)
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Agent Count'
+                            }
+                        },
+                        y: { // Y-axis is now the labels (category axis)
+                            title: {
+                                display: true,
+                                text: 'Supervisor'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+        },
+
+        updateAgentsChart() {
+            if (this.agentsChartInstance) {
+                this.agentsChartInstance.data.labels = this.agentSupervisorData.names;
+                this.agentsChartInstance.data.datasets[0].data = this.agentSupervisorData.counts;
+                this.agentsChartInstance.update();
+            }
+        },
+
+        initPOSConditionChart() {
+            const ctx = document.getElementById('posConditionChart');
+            if (!ctx) return; // Exit if the canvas element is not in the DOM
+
+            // Destroy existing chart if it exists
+            if (this.posConditionChartInstance) {
+                this.posConditionChartInstance.destroy();
+            }
+
+            this.posConditionChartInstance = new Chart(ctx, {
+                type: 'pie',
+                data: {
+                    labels: this.posConditionData.labels,
+                    datasets: [{
+                        data: this.posConditionData.counts,
+                        backgroundColor: [
+                            '#10B981', // Operational (Green)
+                            '#F59E0B', // Maintenance (Yellow/Amber)
+                            '#EF4444', // Faulty (Red)
+                            '#9CA3AF'  // Retired (Gray)
+                        ],
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right',
+                        },
+                        title: {
+                            display: false,
+                        }
+                    }
+                }
+            });
+        },
+
+        updatePOSConditionChart() {
+            if (this.posConditionChartInstance) {
+                this.posConditionChartInstance.data.labels = this.posConditionData.labels;
+                this.posConditionChartInstance.data.datasets[0].data = this.posConditionData.counts;
+                this.posConditionChartInstance.update();
+            }
+        },
+        
+        // --- Reporting Logic (PDF Export) ---
+        exportToPDF(entity) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            let title = '';
+            let columns = [];
+            let rows = [];
+            let data = [];
+
+            if (entity === 'supervisors') {
+                title = 'Supervisors Report';
+                columns = ['ID', 'Name', 'Region', 'Contact'];
+                data = this.supervisors;
+                rows = data.map(s => [s.supervisor_id, s.name, s.region, s.contact]);
+            } else if (entity === 'agents') {
+                title = 'Agents Report';
+                columns = ['ID', 'Name', 'Location', 'Supervisor'];
+                data = this.agents;
+                rows = data.map(a => [a.agent_id, a.name, a.location, a.supervisor_name]);
+            } else if (entity === 'pos') {
+                title = 'POS Devices Report';
+                columns = ['Serial No.', 'Model', 'Status', 'Agent', 'Date Issued'];
+                data = this.posDevices;
+                rows = data.map(p => [p.serial_number, p.model, p.status, p.agent_name || 'Unassigned', p.formatted_date_issued || 'N/A']);
+            } else {
+                Alpine.store('toasts').showError('Export Error', 'Unknown entity for PDF export.');
+                return;
+            }
+
+            doc.text(title, 14, 15);
+            doc.autoTable({
+                startY: 20,
+                head: [columns],
+                body: rows,
+                theme: 'striped',
+                headStyles: { fillColor: [14, 165, 233] } // sky-500
+            });
+
+            doc.save(`${title.toLowerCase().replace(/\s/g, '-')}-${formatDate(new Date())}.pdf`);
+            Alpine.store('toasts').showSuccess('PDF Generated', `${title} successfully exported.`);
+        },
+
+
+        // --- CRUD Modals & Operations ---
+        openModal(view, title, data = {}) {
+            this.modalView = view;
+            this.modalTitle = title;
+            // Deep clone the object for editing to avoid modifying data before save
+            this.form = JSON.parse(JSON.stringify(data)); 
+            this.showModal = true;
+            this.$nextTick(() => {
+                lucide.createIcons();
+                // If it's an edit view, format date if necessary
+                if (view === 'edit-pos' && this.form.date_issued) {
+                    this.form.date_issued = formatDate(this.form.date_issued);
+                }
+            });
+        },
+        
+        closeModal(success = false) {
+            this.showModal = false;
+            this.form = {};
+            if (success) {
+                // Re-fetch data to update the table/charts
+                this.fetchData();
+            }
+        },
+
+        // --- Supervisor CRUD ---
+        async saveSupervisor() {
+            const isEdit = this.modalView === 'edit-supervisor';
+            const table = 'supervisors';
+            const payload = {
+                supervisor_id: this.form.supervisor_id,
+                name: this.form.name,
+                region: this.form.region,
+                contact: this.form.contact,
+            };
+
+            let error;
+            if (isEdit) {
+                // Update operation
+                ({ error } = await supabaseClient
+                    .from(table)
+                    .update(payload)
+                    .eq('supervisor_id', this.form.supervisor_id));
+            } else {
+                // Insert operation
+                ({ error } = await supabaseClient
+                    .from(table)
+                    .insert([payload]));
+            }
+
+            if (error) {
+                Alpine.store('toasts').showError('Save Error', `Failed to ${isEdit ? 'update' : 'add'} supervisor: ${error.message}`);
+                console.error(`Error saving supervisor:`, error);
+            } else {
+                Alpine.store('toasts').showSuccess('Success', `Supervisor ${isEdit ? 'updated' : 'added'} successfully.`);
+                await recordActivity(
+                    isEdit ? 'UPDATE_SUPERVISOR' : 'ADD_SUPERVISOR', 
+                    { entity_type: 'Supervisor', entity_id: this.form.supervisor_id, name: this.form.name }, 
+                    this.currentUser.id, 
+                    this.currentUser.role
+                );
+                this.closeModal(true);
+            }
+        },
+
+        // --- Agent CRUD ---
+        async saveAgent() {
+            const isEdit = this.modalView === 'edit-agent';
+            const table = 'agents';
+            const payload = {
+                agent_id: this.form.agent_id,
+                name: this.form.name,
+                location: this.form.location,
+                supervisor_id: this.form.supervisor_id,
+            };
+
+            let error;
+            if (isEdit) {
+                // Update operation
+                ({ error } = await supabaseClient
+                    .from(table)
+                    .update(payload)
+                    .eq('agent_id', this.form.agent_id));
+            } else {
+                // Insert operation
+                ({ error } = await supabaseClient
+                    .from(table)
+                    .insert([payload]));
+            }
+
+            if (error) {
+                Alpine.store('toasts').showError('Save Error', `Failed to ${isEdit ? 'update' : 'register'} agent: ${error.message}`);
+                console.error(`Error saving agent:`, error);
+            } else {
+                Alpine.store('toasts').showSuccess('Success', `Agent ${isEdit ? 'updated' : 'registered'} successfully.`);
+                await recordActivity(
+                    isEdit ? 'UPDATE_AGENT' : 'ADD_AGENT', 
+                    { entity_type: 'Agent', entity_id: this.form.agent_id, name: this.form.name }, 
+                    this.currentUser.id, 
+                    this.currentUser.role
+                );
+                this.closeModal(true);
+            }
+        },
+
+        // --- POS Device CRUD ---
+        // --- POS Device CRUD ---
+        // main.js - inside function app()
+
+        // --- POS Device CRUD ---
+        async savePOS() {
+            const isEdit = this.modalView === 'edit-pos';
+            const table = 'pos_devices';
+            
+            // ✅ FIX: Since pos_id is PRIMARY KEY but NOT auto-generated by the schema, 
+            // we must generate a unique ID client-side for new records.
+            if (!isEdit && !this.form.pos_id) {
+                 // Use current timestamp as a simple unique ID
+                 this.form.pos_id = Date.now(); 
+            }
+
+            // Define the payload with only fields matching the new schema
+            const payload = {
+                // Include the pos_id
+                pos_id: this.form.pos_id, 
+                serial_number: this.form.serial_number,
+                status: this.form.status || 'Available',
+                condition: this.form.condition || 'Good',
+                notes: this.form.notes || null,
+                agent_id: this.form.agent_id || null,
+                
+                // date_issued is only included if explicitly set in the form and we are editing.
+                ...(this.form.date_issued && isEdit && { date_issued: this.form.date_issued }),
+            };
+            
+            // Remove null/undefined values before sending to prevent unexpected API errors
+            Object.keys(payload).forEach(key => (payload[key] === undefined) && delete payload[key]);
+
+
+            let error;
+            if (isEdit) {
+                ({ error } = await supabaseClient
+                    .from(table)
+                    .update(payload)
+                    .eq('serial_number', this.form.serial_number));
+            } else {
+                ({ error } = await supabaseClient
+                    .from(table)
+                    .insert([payload]));
+            }
+
+            if (error) {
+                Alpine.store('toasts').showError('Save Error', `Failed to ${isEdit ? 'update' : 'add'} POS device: ${error.message}`);
+                console.error(`Error saving POS:`, error);
+            } else {
+                Alpine.store('toasts').showSuccess('Success', `POS Device ${isEdit ? 'updated' : 'added'} successfully.`);
+                await recordActivity(
+                    isEdit ? 'UPDATE_POS' : 'ADD_POS', 
+                    { entity_type: 'POS Device', entity_id: this.form.serial_number, status: this.form.status }, 
+                    this.currentUser.id, 
+                    this.currentUser.role
+                );
+                this.closeModal(true);
+            }
+        },
+        // --- Maintenance Update ---
+        async updateMaintenanceStatus() {
+            const table = 'pos_devices';
+            const newStatus = this.form.status;
+
+            try {
+                const { error } = await supabaseClient
+                    .from(table)
+                    .update({ status: newStatus })
+                    .eq('serial_number', this.form.serial_number);
+
+                if (error) throw error;
+                
+                Alpine.store('toasts').showSuccess('Status Updated', `POS Device ${this.form.serial_number} status changed to ${newStatus}.`);
+                await recordActivity(
+                    'UPDATE_POS_STATUS', 
+                    { entity_type: 'POS Device', entity_id: this.form.serial_number, old_status: this.form.status_old, new_status: newStatus }, 
+                    this.currentUser.id, 
+                    this.currentUser.role
+                );
+                this.closeModal(true);
+            } catch (error) {
+                Alpine.store('toasts').showError('Update Error', `Failed to update POS status: ${error.message}`);
+                console.error(`Error updating POS status:`, error);
+            }
+        },
+
+        // --- Delete Operation ---
+        async deleteItem() {
+            let error;
+            let table = '';
+            let idField = '';
+            let idValue = '';
+            let entityType = '';
+
+            if (this.modalView === 'delete-supervisor') {
+                table = 'supervisors';
+                idField = 'supervisor_id';
+                idValue = this.form.supervisor_id;
+                entityType = 'Supervisor';
+            } else if (this.modalView === 'delete-agent') {
+                table = 'agents';
+                idField = 'agent_id';
+                idValue = this.form.agent_id;
+                entityType = 'Agent';
+            } else if (this.modalView === 'delete-pos') {
+                table = 'pos_devices';
+                idField = 'serial_number';
+                idValue = this.form.serial_number;
+                entityType = 'POS Device';
+            } else {
+                return;
+            }
+
+            ({ error } = await supabaseClient
+                .from(table)
+                .delete()
+                .eq(idField, idValue));
+
+            if (error) {
+                Alpine.store('toasts').showError('Delete Error', `Failed to delete ${entityType}: ${error.message}`);
+                console.error(`Error deleting ${entityType}:`, error);
+            } else {
+                Alpine.store('toasts').showSuccess('Success', `${entityType} ${idValue} deleted successfully.`);
+                await recordActivity(
+                    `DELETE_${entityType.toUpperCase().replace(/\s/g, '_')}`, 
+                    { entity_type: entityType, entity_id: idValue, name: this.form.name || this.form.serial_number }, 
+                    this.currentUser.id, 
+                    this.currentUser.role
+                );
+                this.closeModal(true);
+            }
+        },
+        
+        // --- Settings Management ---
+        saveSettings() {
+            // Update the current user's display name
+            this.currentUser.name = this.settings.admin_name;
+
+            Alpine.store('toasts').showSuccess('Settings Saved', 'Application settings updated.');
+            this.updateTime(); // Update greeting immediately
+        }
+    }
+}

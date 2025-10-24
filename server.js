@@ -91,3 +91,32 @@ const supervisorsData = [
 app.get('/api/supervisors-with-agents', (req, res) => {
   res.json(supervisorsData);
 });
+// server.js - Add this new POST endpoint
+
+app.post('/register-pos-device', async (req, res) => {
+    // Destructure all required columns from the request body
+    const { serial_number, location, date_issued, agent_id, status, condition, notes } = req.body; 
+
+    // Execute the insert query
+    // NOTE: The primary key (pos_id) is omitted because it is SERIAL (auto-incrementing)
+    const { data, error } = await supabase
+        .from('pos_devices')
+        .insert([{ 
+            serial_number: serial_number, 
+            location: location,
+            date_issued: date_issued, // The real-time date from the client
+            agent_id: agent_id,      // The Foreign Key selected in the form
+            status: status,
+            condition: condition,
+            notes: notes
+        }]);
+
+    if (error) {
+        console.error('POS Device Registration Error:', error.message);
+        // Send a 400 status with the error message back to the client
+        return res.status(400).json({ error: error.message });
+    }
+    
+    // Success response
+    res.json({ success: true, data: data });
+});
